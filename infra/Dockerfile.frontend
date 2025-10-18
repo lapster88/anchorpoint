@@ -1,0 +1,7 @@
+FROM node:20-slim
+WORKDIR /app
+COPY frontend/package.json frontend/pnpm-lock.yaml* /app/ 2>/dev/null || :
+RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN pnpm i || true
+COPY frontend /app
+CMD ["pnpm", "dev", "--host"]
