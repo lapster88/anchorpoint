@@ -1,4 +1,4 @@
-# Climbing Guide App — Starter
+# Anchorpoint
 
 A Python-first Django + React starter for guide services (owners, office managers, guides, and guests).
 
