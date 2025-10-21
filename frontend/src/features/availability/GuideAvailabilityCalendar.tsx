@@ -104,6 +104,8 @@ export default function GuideAvailabilityCalendar(){
     [membershipsQuery.data]
   )
 
+  // React-big-calendar expects plain event objects; normalise API payloads once so we can render,
+  // reuse in overlap checks, and avoid re-parsing dates inside the component tree.
   const events: CalendarEvent[] = useMemo(() => {
     return availability
       .map((slot) => {
@@ -131,6 +133,7 @@ export default function GuideAvailabilityCalendar(){
   }, [availability])
 
   const createMutation = useMutation({
+    // Creating availability triggers a refetch for the calendar list so every view stays in sync.
     mutationFn: async (payload: Record<string, unknown>) => (await api.post('/api/auth/availabilities/', payload)).data,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['guide-availability'] })
@@ -519,6 +522,7 @@ function AvailabilityFormModal({
             <div className="mt-3 space-y-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
               <p className="font-medium">Warning: this overlaps {overlappingUnavailable.length} existing unavailable block(s).</p>
               <ul className="list-disc pl-4">
+                {/* List the first few collisions so guides understand what they are about to override. */}
                 {overlappingUnavailable.slice(0, 3).map((event) => (
                   <li key={event.id}>
                     {format(event.start, 'PPpp')} – {format(event.end, 'PPpp')}

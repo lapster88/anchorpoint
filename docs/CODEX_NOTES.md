@@ -39,5 +39,6 @@
 - Always review `codex.yaml` and `docs/PROJECT_CONTEXT.md` before coding to confirm stack assumptions.
 - Confirm whether commands should run on host vs. Docker container; prefer containerized workflows unless explicitly told otherwise.
 - When adding dependencies, install them through the appropriate container (`frontend` for pnpm, `backend` for pip) to keep lockfiles consistent.
+- Frontend work should include inline comments for complex hooks/memoised logic—do a quick pass before committing to ensure the intent is documented.
 - Backend tests now live alongside their apps (`accounts/tests`, `trips/tests`, etc.); place new coverage next to the feature under test.
 - Keep an eye on mounted volumes (`frontend/dist`, `.pnpm-store`, etc.) that appear untracked—avoid committing them.

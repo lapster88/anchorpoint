@@ -86,4 +86,4 @@ assistant:
   comment_guidelines:
     summary: "Add concise docstrings or inline comments where context helps future readers."
     backend: "Prefer Python docstrings for API/views/serializers describing intent and side-effects."
-    frontend: "Use JSDoc or targeted inline comments for hooks/components handling complex state or effects."
+    frontend: "Use JSDoc or targeted inline comments for hooks/components handling complex state, effects, or data access. Always document non-trivial React hooks and memoized computations."
