@@ -35,7 +35,7 @@ type ServiceMembership = {
   is_active: boolean
 }
 
-type CalendarEvent = {
+export type CalendarEvent = {
   id: number
   title: string
   start: Date
@@ -44,14 +44,13 @@ type CalendarEvent = {
   resource: GuideAvailability
 }
 
-type FormState =
+export type FormState =
   | { mode: 'create'; key: string; start: Date; end: Date }
   | { mode: 'edit'; key: string; availability: GuideAvailability }
 
 type AvailabilityFormValues = {
   start: string
   end: string
-  is_available: boolean
   visibility: GuideAvailability['visibility']
   guide_service: string
   note: string
@@ -60,6 +59,8 @@ type AvailabilityFormValues = {
 const locales = {
   'en-US': enUS
 }
+
+const OVERLAP_WARNING_STORAGE_KEY = 'anchorpoint.availability.overlapWarningDismissed'
 
 const localizer = dateFnsLocalizer({
   format,
@@ -72,6 +73,10 @@ const localizer = dateFnsLocalizer({
 export default function GuideAvailabilityCalendar(){
   const { isAuthenticated } = useAuth()
   const queryClient = useQueryClient()
+  const [overlapWarningDismissed, setOverlapWarningDismissed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(OVERLAP_WARNING_STORAGE_KEY) === 'true'
+  })
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['guide-availability'],
@@ -109,7 +114,7 @@ export default function GuideAvailabilityCalendar(){
         }
 
         const allDay = isAllDayBlock(startDate, endDate)
-        const availabilityLabel = slot.is_available ? 'Available' : 'Busy'
+        const availabilityLabel = slot.is_available ? 'Available' : 'Unavailable'
         const tripLabel = slot.trip_title ? ` · ${slot.trip_title}` : ''
         const serviceLabel = slot.guide_service_name ? ` (${slot.guide_service_name})` : ''
 
@@ -188,10 +193,12 @@ export default function GuideAvailabilityCalendar(){
       return
     }
 
+    const isAvailable = formState?.mode === 'edit' ? formState.availability.is_available : false
+
     const payload: Record<string, unknown> = {
       start: startDate.toISOString(),
       end: endDate.toISOString(),
-      is_available: values.is_available,
+      is_available: isAvailable,
       visibility: values.visibility,
       note: values.note.trim() ? values.note.trim() : null
     }
@@ -247,7 +254,7 @@ export default function GuideAvailabilityCalendar(){
       <header>
         <h2 className="text-2xl font-semibold">Guide Availability</h2>
         <p className="text-sm text-slate-600">
-          Click on the calendar to add new availability or select an existing block to edit.
+          Click and drag to block off time you are unavailable. Delete blocks when you reopen your schedule.
         </p>
       </header>
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow">
@@ -284,6 +291,16 @@ export default function GuideAvailabilityCalendar(){
           onClose={handleCloseModal}
           onSubmit={handleSubmit}
           onDelete={formState.mode === 'edit' ? handleDelete : undefined}
+          existingEvents={events}
+          hideOverlapWarning={overlapWarningDismissed}
+          onDismissOverlapWarning={() => {
+            setOverlapWarningDismissed(true)
+            if (typeof window !== 'undefined') {
+              window.localStorage.setItem(OVERLAP_WARNING_STORAGE_KEY, 'true')
+            }
+          }}
+          currentAvailabilityId={formState.mode === 'edit' ? formState.availability.id : undefined}
+          originalAvailability={formState.mode === 'edit' ? formState.availability : undefined}
         />
       )}
     </div>
@@ -295,7 +312,7 @@ function AvailabilityEvent({ event }: EventProps<CalendarEvent>){
   return (
     <div className="text-xs leading-tight">
       <div className="font-semibold">
-        {slot.is_available ? 'Available' : 'Busy'}
+        {slot.is_available ? 'Available' : 'Unavailable'}
         {slot.trip_title ? ` · ${slot.trip_title}` : ''}
       </div>
       {slot.note && <div className="text-[11px]">{slot.note}</div>}
@@ -326,7 +343,7 @@ function buildTooltip(slot: GuideAvailability): string {
   const end = new Date(slot.end)
   const timeRange = `${format(start, 'PPpp')} – ${format(end, 'PPpp')}`
   const details = [
-    slot.is_available ? 'Available' : 'Busy',
+    slot.is_available ? 'Available' : 'Unavailable',
     timeRange,
     slot.trip_title ? `Trip: ${slot.trip_title}` : null,
     slot.guide_service_name ? `Service: ${slot.guide_service_name}` : null,
@@ -344,12 +361,41 @@ function isAllDayBlock(start: Date, end: Date): boolean {
   return startsAtMidnight && endsAtMidnight && minutes >= 24 * 60
 }
 
+export function rangesOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
+  return aStart < bEnd && aEnd > bStart
+}
+
+type OverlapOptions = {
+  excludeAvailabilityId?: number
+}
+
+export function findOverlappingUnavailableEvents(
+  events: CalendarEvent[],
+  windowStart: Date,
+  windowEnd: Date,
+  options: OverlapOptions = {}
+): CalendarEvent[] {
+  if (Number.isNaN(windowStart.getTime()) || Number.isNaN(windowEnd.getTime())) {
+    return []
+  }
+  const { excludeAvailabilityId } = options
+  return events.filter((event) => {
+    if (event.resource.is_available) {
+      return false
+    }
+    if (excludeAvailabilityId && event.resource.id === excludeAvailabilityId) {
+      return false
+    }
+    return rangesOverlap(windowStart, windowEnd, event.start, event.end)
+  })
+}
+
 function Legend(){
   return (
     <div className="flex flex-wrap items-center gap-6 text-sm text-slate-600">
       <span className="font-medium">Legend:</span>
-      <LegendItem colorClass="bg-emerald-200 border-emerald-300 text-emerald-800" label="Available slot" />
-      <LegendItem colorClass="bg-rose-200 border-rose-300 text-rose-800" label="Busy slot" />
+      <LegendItem colorClass="bg-rose-200 border-rose-300 text-rose-800" label="Unavailable block" />
+      <LegendItem colorClass="bg-emerald-200 border-emerald-300 text-emerald-800" label="Available (system)" />
     </div>
   )
 }
@@ -363,13 +409,12 @@ function LegendItem({ colorClass, label }: { colorClass: string; label: string }
   )
 }
 
-function buildInitialFormValues(formState: FormState): AvailabilityFormValues {
+export function buildInitialFormValues(formState: FormState): AvailabilityFormValues {
   if (formState.mode === 'create') {
     return {
       start: toDatetimeLocal(formState.start),
       end: toDatetimeLocal(formState.end),
-      is_available: true,
-      visibility: 'detail',
+      visibility: 'busy',
       guide_service: '',
       note: ''
     }
@@ -379,7 +424,6 @@ function buildInitialFormValues(formState: FormState): AvailabilityFormValues {
   return {
     start: toDatetimeLocal(new Date(availability.start)),
     end: toDatetimeLocal(new Date(availability.end)),
-    is_available: availability.is_available,
     visibility: availability.visibility,
     guide_service: availability.guide_service ? String(availability.guide_service) : '',
     note: availability.note ?? ''
@@ -404,6 +448,11 @@ type AvailabilityFormModalProps = {
   onClose: () => void
   onSubmit: (values: AvailabilityFormValues) => Promise<void>
   onDelete?: () => Promise<void>
+  existingEvents: CalendarEvent[]
+  hideOverlapWarning: boolean
+  onDismissOverlapWarning: () => void
+  currentAvailabilityId?: number
+  originalAvailability?: GuideAvailability
 }
 
 function AvailabilityFormModal({
@@ -414,7 +463,12 @@ function AvailabilityFormModal({
   error,
   onClose,
   onSubmit,
-  onDelete
+  onDelete,
+  existingEvents,
+  hideOverlapWarning,
+  onDismissOverlapWarning,
+  currentAvailabilityId,
+  originalAvailability
 }: AvailabilityFormModalProps){
   const [values, setValues] = useState<AvailabilityFormValues>(initialValues)
 
@@ -433,18 +487,54 @@ function AvailabilityFormModal({
     await onSubmit(values)
   }
 
-  const slotType = values.is_available ? 'available' : 'busy'
+  const currentStart = new Date(values.start)
+  const currentEnd = new Date(values.end)
+  const overlappingUnavailable = useMemo(
+    () =>
+      findOverlappingUnavailableEvents(existingEvents, currentStart, currentEnd, {
+        excludeAvailabilityId: currentAvailabilityId
+      }),
+    [currentStart, currentEnd, existingEvents, currentAvailabilityId]
+  )
+
+  const isSystemGenerated = originalAvailability && originalAvailability.source !== 'manual'
 
   const content = (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
         <header className="mb-4">
           <h3 className="text-lg font-semibold">
-            {mode === 'edit' ? 'Edit availability' : 'Add availability'}
+            {mode === 'edit' ? 'Edit unavailable block' : 'Add unavailable block'}
           </h3>
           <p className="text-sm text-slate-600">
-            Define when you’re bookable or blocked. Times use your local timezone.
+            Times use your local timezone. Remove the block when you’re free again.
           </p>
+          {isSystemGenerated && (
+            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              This block was generated automatically ({originalAvailability?.source_display}). You can adjust the dates,
+              but deleting it may affect linked records.
+            </p>
+          )}
+          {!!overlappingUnavailable.length && !hideOverlapWarning && (
+            <div className="mt-3 space-y-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <p className="font-medium">Warning: this overlaps {overlappingUnavailable.length} existing unavailable block(s).</p>
+              <ul className="list-disc pl-4">
+                {overlappingUnavailable.slice(0, 3).map((event) => (
+                  <li key={event.id}>
+                    {format(event.start, 'PPpp')} – {format(event.end, 'PPpp')}
+                  </li>
+                ))}
+              </ul>
+              {overlappingUnavailable.length > 3 && <p>…and more.</p>}
+              <button
+                type="button"
+                className="text-xs font-medium text-amber-700 underline"
+                onClick={onDismissOverlapWarning}
+              >
+                Don’t show this warning again
+              </button>
+            </div>
+          )}
         </header>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="grid gap-3">
@@ -470,35 +560,21 @@ function AvailabilityFormModal({
             </label>
           </div>
 
-          <div className="grid gap-3">
-            <label className="text-sm font-medium text-slate-700">
-              Slot type
-              <select
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-                value={slotType}
-                onChange={(event) => handleChange('is_available', event.target.value === 'available')}
-              >
-                <option value="available">Available</option>
-                <option value="busy">Busy</option>
-              </select>
-            </label>
-
-            <label className="text-sm font-medium text-slate-700">
-              Visibility
-              <select
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-                value={values.visibility}
-                onChange={(event) => handleChange('visibility', event.target.value as GuideAvailability['visibility'])}
-              >
-                <option value="detail">Detail (show notes)</option>
-                <option value="busy">Busy (hide details)</option>
-                <option value="private">Private (only you can see)</option>
-              </select>
-            </label>
-          </div>
+          <label className="text-sm font-medium text-slate-700">
+            Visibility
+            <select
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+              value={values.visibility}
+              onChange={(event) => handleChange('visibility', event.target.value as GuideAvailability['visibility'])}
+            >
+              <option value="busy">Busy (hide details)</option>
+              <option value="detail">Detailed (show notes)</option>
+              <option value="private">Private (only you can see)</option>
+            </select>
+          </label>
 
           <label className="text-sm font-medium text-slate-700">
-            Service context
+            Applies to service
             <select
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
               value={values.guide_service}
@@ -518,7 +594,7 @@ function AvailabilityFormModal({
             <textarea
               rows={3}
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-              placeholder="Optional context (visible based on visibility setting)"
+              placeholder="Optional context (shown when visibility allows)"
               value={values.note}
               onChange={(event) => handleChange('note', event.target.value)}
             />

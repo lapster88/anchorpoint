@@ -2,14 +2,13 @@ import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from accounts.models import (
+from availability.models import (
     GuideAvailability,
     GuideAvailabilityShare,
     GuideCalendarIntegration,
-    ServiceMembership,
-    User,
 )
-from accounts.services.calendar_sync import ExternalEvent, ingest_events
+from availability.services.calendar_sync import ExternalEvent, ingest_events
+from accounts.models import ServiceMembership, User
 from orgs.models import GuideService
 
 
@@ -125,6 +124,31 @@ def test_availability_api_crud(api_client, guide, guide_service_a):
 
     delete_response = api_client.delete(f"/api/auth/availabilities/{availability_id}/")
     assert delete_response.status_code == 204
+
+
+@pytest.mark.django_db
+def test_manual_availability_accepts_null_note(api_client, guide, guide_service_a):
+    ServiceMembership.objects.create(
+        user=guide,
+        guide_service=guide_service_a,
+        role=ServiceMembership.GUIDE,
+    )
+    start = timezone.now() + timezone.timedelta(days=1)
+    end = start + timezone.timedelta(hours=2)
+    response = api_client.post(
+        "/api/auth/availabilities/",
+        {
+            "guide_service": guide_service_a.id,
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "is_available": False,
+            "visibility": GuideAvailability.VISIBILITY_BUSY,
+            "note": None,
+        },
+        format="json",
+    )
+    assert response.status_code == 201
+    assert response.data["note"] == ""
 
 
 @pytest.mark.django_db

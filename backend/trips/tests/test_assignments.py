@@ -1,7 +1,8 @@
 import pytest
 from django.utils import timezone
 
-from accounts.models import GuideAvailability, User
+from availability.models import GuideAvailability
+from accounts.models import User
 from orgs.models import GuideService
 from trips.models import Assignment, Trip
 

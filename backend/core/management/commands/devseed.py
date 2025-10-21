@@ -1,16 +1,12 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
-from accounts.models import (
-    GuideAvailability,
-    GuideAvailabilityShare,
-    ServiceMembership,
-    User,
-)
+from availability.models import GuideAvailability, GuideAvailabilityShare
+from accounts.models import ServiceMembership, User
 from bookings.models import Booking, GuestProfile
 from orgs.models import GuideService
 from trips.models import Assignment, Trip
@@ -86,79 +82,82 @@ class Command(BaseCommand):
             self.stdout.write(self.style.MIGRATE_HEADING("Ensuring admin superuser"))
             self._ensure_superuser()
 
-            self.stdout.write(self.style.MIGRATE_HEADING("Creating trips & assignments"))
-            now = timezone.now()
-            trips = [
-                self._ensure_trip(
-                    guide_service=summit_service,
-                    title="Intro to Trad Climbing",
-                    location="Index, WA",
-                    start=now + timedelta(days=3),
-                    end=now + timedelta(days=3, hours=8),
-                    capacity=4,
-                    price_cents=45000,
-                    difficulty="Beginner",
-                ),
-                self._ensure_trip(
-                    guide_service=summit_service,
-                    title="Glacier Travel Fundamentals",
-                    location="Mt. Baker, WA",
-                    start=now + timedelta(days=10),
-                    end=now + timedelta(days=12),
-                    capacity=6,
-                    price_cents=89000,
-                    difficulty="Intermediate",
-                ),
-                self._ensure_trip(
-                    guide_service=desert_service,
-                    title="Desert Tower Weekend",
-                    location="Moab, UT",
-                    start=now + timedelta(days=17),
-                    end=now + timedelta(days=18, hours=12),
-                    capacity=2,
-                    price_cents=72000,
-                    difficulty="Advanced",
-                ),
-            ]
+            self.stdout.write(self.style.MIGRATE_HEADING("Cleaning old trip + availability data"))
+            Assignment.objects.filter(guide__in=[guide, flex_guide]).delete()
+            Trip.objects.filter(guide_service__in=[summit_service, desert_service], title__in=[
+                "Intro to Trad Climbing",
+                "Glacier Travel Fundamentals",
+                "Desert Tower Weekend",
+            ]).delete()
+            GuideAvailability.objects.filter(
+                guide__in=[guide, flex_guide],
+                source=GuideAvailability.SOURCE_ASSIGNMENT,
+            ).delete()
 
-            Assignment.objects.get_or_create(
-                trip=trips[0],
-                guide=guide,
-                defaults={"role": Assignment.LEAD},
+            tz = timezone.get_current_timezone()
+            self.stdout.write(self.style.MIGRATE_HEADING("Creating trips & assignments"))
+            trad_trip = self._create_trip(
+                guide_service=summit_service,
+                title="Intro to Trad Climbing",
+                location="Index, WA",
+                start=timezone.make_aware(datetime(2025, 10, 20, 8, 0), tz),
+                end=timezone.make_aware(datetime(2025, 10, 20, 16, 0), tz),
+                capacity=4,
+                price_cents=45000,
+                difficulty="Beginner",
             )
-            Assignment.objects.get_or_create(
-                trip=trips[1],
-                guide=guide,
-                defaults={"role": Assignment.LEAD},
+            glacier_trip = self._create_trip(
+                guide_service=summit_service,
+                title="Glacier Travel Fundamentals",
+                location="Mt. Baker, WA",
+                start=timezone.make_aware(datetime(2025, 10, 28, 6, 0), tz),
+                end=timezone.make_aware(datetime(2025, 10, 30, 18, 0), tz),
+                capacity=6,
+                price_cents=89000,
+                difficulty="Intermediate",
             )
-            Assignment.objects.get_or_create(
-                trip=trips[2],
-                guide=flex_guide,
-                defaults={"role": Assignment.LEAD},
+            desert_trip = self._create_trip(
+                guide_service=desert_service,
+                title="Desert Tower Weekend",
+                location="Moab, UT",
+                start=timezone.make_aware(datetime(2025, 10, 24, 8, 0), tz),
+                end=timezone.make_aware(datetime(2025, 10, 25, 20, 0), tz),
+                capacity=2,
+                price_cents=72000,
+                difficulty="Advanced",
             )
+
+            Assignment.objects.create(trip=trad_trip, guide=guide, role=Assignment.LEAD)
+            Assignment.objects.create(trip=glacier_trip, guide=guide, role=Assignment.LEAD)
+            Assignment.objects.create(trip=desert_trip, guide=flex_guide, role=Assignment.LEAD)
 
             self.stdout.write(self.style.MIGRATE_HEADING("Creating manual availability and bookings"))
-            GuideAvailability.objects.get_or_create(
+            GuideAvailability.objects.filter(
+                guide__in=[guide, flex_guide],
+                source=GuideAvailability.SOURCE_MANUAL,
+            ).delete()
+            GuideAvailability.objects.create(
                 guide=guide,
-                start=now + timedelta(days=1, hours=8),
-                end=now + timedelta(days=1, hours=18),
-                defaults={
-                    "is_available": True,
-                    "guide_service": summit_service,
-                    "visibility": GuideAvailability.VISIBILITY_DETAIL,
-                    "note": "Open for custom trips",
-                },
+                guide_service=summit_service,
+                start=timezone.make_aware(datetime(2025, 10, 22, 8, 0), tz),
+                end=timezone.make_aware(datetime(2025, 10, 22, 17, 0), tz),
+                is_available=False,
+                visibility=GuideAvailability.VISIBILITY_DETAIL,
+                note="Open for custom trips",
             )
-            off_day, _ = GuideAvailability.objects.get_or_create(
+            GuideAvailability.objects.filter(
                 guide=guide,
-                start=now + timedelta(days=5),
-                end=now + timedelta(days=6),
-                defaults={
-                    "is_available": False,
-                    "guide_service": summit_service,
-                    "visibility": GuideAvailability.VISIBILITY_BUSY,
-                    "note": "Family in town",
-                },
+                note="Family in town",
+                source=GuideAvailability.SOURCE_MANUAL,
+            ).delete()
+            off_day = GuideAvailability.objects.create(
+                guide=guide,
+                guide_service=summit_service,
+                start=timezone.make_aware(datetime(2025, 10, 26, 0, 0), tz),
+                end=timezone.make_aware(datetime(2025, 10, 27, 0, 0), tz),
+                is_available=False,
+                visibility=GuideAvailability.VISIBILITY_BUSY,
+                note="Family in town",
             )
             GuideAvailabilityShare.objects.get_or_create(
                 availability=off_day,
@@ -166,8 +165,8 @@ class Command(BaseCommand):
                 defaults={"visibility": GuideAvailability.VISIBILITY_BUSY},
             )
 
-            Booking.objects.get_or_create(
-                trip=trips[0],
+            Booking.objects.update_or_create(
+                trip=trad_trip,
                 guest=guest,
                 defaults={"party_size": 2, "status": Booking.PAID},
             )
@@ -240,7 +239,7 @@ class Command(BaseCommand):
             )
         return membership
 
-    def _ensure_trip(
+    def _create_trip(
         self,
         *,
         guide_service: GuideService,
@@ -252,39 +251,17 @@ class Command(BaseCommand):
         price_cents: int,
         difficulty: str,
     ) -> Trip:
-        trip, created = Trip.objects.get_or_create(
+        return Trip.objects.create(
             guide_service=guide_service,
             title=title,
+            location=location,
             start=start,
-            defaults={
-                "location": location,
-                "end": end,
-                "capacity": capacity,
-                "price_cents": price_cents,
-                "difficulty": difficulty,
-                "description": f"Sample itinerary for {title}.",
-            },
+            end=end,
+            capacity=capacity,
+            price_cents=price_cents,
+            difficulty=difficulty,
+            description=f"Sample itinerary for {title}.",
         )
-        if not created:
-            fields_to_update = {}
-            if trip.location != location:
-                fields_to_update["location"] = location
-            if trip.end != end:
-                fields_to_update["end"] = end
-            if trip.capacity != capacity:
-                fields_to_update["capacity"] = capacity
-            if trip.price_cents != price_cents:
-                fields_to_update["price_cents"] = price_cents
-            if trip.difficulty != difficulty:
-                fields_to_update["difficulty"] = difficulty
-            desired_description = f"Sample itinerary for {title}."
-            if trip.description != desired_description:
-                fields_to_update["description"] = desired_description
-            if fields_to_update:
-                for attr, value in fields_to_update.items():
-                    setattr(trip, attr, value)
-                trip.save(update_fields=list(fields_to_update.keys()))
-        return trip
 
     def _ensure_superuser(self) -> User:
         user, created = User.objects.get_or_create(

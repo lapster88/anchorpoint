@@ -46,6 +46,7 @@ context:
     Availability design decisions are summarized in docs/design/availability.md.
     Session-specific workflow reminders live in docs/CODEX_NOTES.md — review this on init for Docker-first commands and testing tips.
     Local development and testing happen inside Docker; rely on the compose exec targets (`make be`, `make fe`, etc.) rather than running host binaries directly.
+    New features must ship with accompanying automated tests (backend or frontend). Plan and implementation should include test coverage before calling the work complete.
   keywords:
     - guide service
     - trip booking
@@ -66,6 +67,7 @@ commands:
   migrate: docker compose -f infra/docker-compose.yml exec backend python manage.py migrate
   seed: docker compose -f infra/docker-compose.yml exec backend python manage.py devseed
   backend-test: docker compose --env-file .env -f infra/docker-compose.yml exec backend pytest
+  frontend-test: docker compose --env-file .env -f infra/docker-compose.yml exec frontend pnpm test
   frontend-build: docker compose --env-file .env -f infra/docker-compose.yml exec frontend pnpm build
   e2e: make e2e
 

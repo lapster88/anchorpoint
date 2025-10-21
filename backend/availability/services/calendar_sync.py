@@ -3,7 +3,11 @@ from typing import Iterable
 
 from django.utils import timezone
 
-from accounts.models import GuideAvailability, GuideCalendarEvent, GuideCalendarIntegration
+from availability.models import (
+    GuideAvailability,
+    GuideCalendarEvent,
+    GuideCalendarIntegration,
+)
 
 
 @dataclass

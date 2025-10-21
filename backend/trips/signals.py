@@ -6,7 +6,7 @@ from .models import Assignment, Trip
 
 
 def _get_guide_availability_model():
-    from accounts.models import GuideAvailability
+    from availability.models import GuideAvailability
     return GuideAvailability
 
 

@@ -7,21 +7,21 @@
 - Provide a foundation for syncing external calendars (Google, Outlook, etc.).
 
 ## Data Model Updates
-- `accounts.GuideAvailability`
+- `availability.GuideAvailability`
   - Tracks start/end as datetimes, `is_available`, `source` (`manual`, `assignment`, `sync`).
   - Supports optional links to `GuideService` and `Trip` for richer context.
   - Adds `visibility` (`private`, `busy`, `detail`) and `note` fields.
   - Provides `effective_visibility()` helper to resolve per-service access.
-- `accounts.GuideAvailabilityShare`
+- `availability.GuideAvailabilityShare`
   - Overrides default visibility for a specific `GuideService`.
-- `accounts.GuideCalendarIntegration`
+- `availability.GuideCalendarIntegration`
   - Stores provider metadata and tokens for future OAuth/OIDC integrations.
-- `accounts.GuideCalendarEvent`
+- `availability.GuideCalendarEvent`
   - Mirrors external events and links them to generated availability rows.
 
 ## Automation
 - Trip assignment signals create/update/delete `GuideAvailability` records with `source=assignment` and `visibility=detail` for the owning service.
-- `accounts.services.calendar_sync.ingest_events()` ingests external events (currently via structured payloads) and keeps availability slots synced.
+- `availability.services.calendar_sync.ingest_events()` ingests external events (currently via structured payloads) and keeps availability slots synced.
 
 ## API Surface
 - `GET/POST/PATCH/DELETE /api/auth/availabilities/` — guide-managed availability slots
@@ -43,5 +43,5 @@
 - Future work: OAuth flows per provider, background sync job invoking `ingest_events()`, and UI for linking calendars.
 
 ## Testing
-- `tests/test_assignments.py` verifies assignment-driven blocks.
-- `tests/test_availability.py` covers visibility overrides and external ingest scaffolding.
+- `trips/tests/test_assignments.py` verifies assignment-driven blocks.
+- `availability/tests/test_availability.py` covers visibility overrides and external ingest scaffolding.

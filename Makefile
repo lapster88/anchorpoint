@@ -32,6 +32,7 @@ fe:
 
 test:
 	$(COMPOSE) exec backend pytest
+	$(COMPOSE) exec frontend pnpm test
 	$(COMPOSE) exec frontend pnpm build
 
 e2e:

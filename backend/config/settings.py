@@ -15,7 +15,7 @@ INSTALLED_APPS = [
     'django.contrib.admin','django.contrib.auth','django.contrib.contenttypes',
     'django.contrib.sessions','django.contrib.messages','django.contrib.staticfiles',
     'rest_framework','corsheaders','django_filters',
-    'accounts','orgs','trips','bookings','payments','waivers','reports',
+    'core','accounts','availability','orgs','trips','bookings','payments','waivers','reports',
 ]
 
 MIDDLEWARE = [

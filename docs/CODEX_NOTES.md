@@ -20,8 +20,10 @@
 
 ## Testing & QA
 - Backend tests: `docker compose --env-file .env -f infra/docker-compose.yml exec backend pytest`.
+- Frontend unit tests: `docker compose --env-file .env -f infra/docker-compose.yml exec frontend pnpm test`.
 - Frontend build check: `docker compose --env-file .env -f infra/docker-compose.yml exec frontend pnpm build`.
 - End-to-end baseline available via `make e2e` (boots backend/frontend, then runs Playwright container).
+- Policy: Every new feature or regression fix must land with automated test coverage (backend pytest, frontend unit, or e2e as appropriate). Update or add tests before marking work complete.
 
 ## Sample Accounts
 - Superuser: `admin@summitguides.test` / `AdminAnchorpoint123!`
@@ -37,4 +39,5 @@
 - Always review `codex.yaml` and `docs/PROJECT_CONTEXT.md` before coding to confirm stack assumptions.
 - Confirm whether commands should run on host vs. Docker container; prefer containerized workflows unless explicitly told otherwise.
 - When adding dependencies, install them through the appropriate container (`frontend` for pnpm, `backend` for pip) to keep lockfiles consistent.
+- Backend tests now live alongside their apps (`accounts/tests`, `trips/tests`, etc.); place new coverage next to the feature under test.
 - Keep an eye on mounted volumes (`frontend/dist`, `.pnpm-store`, etc.) that appear untracked—avoid committing them.
