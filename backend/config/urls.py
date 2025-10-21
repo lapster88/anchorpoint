@@ -14,6 +14,7 @@ from availability.api import (
     GuideAvailabilityViewSet,
     GuideCalendarIntegrationViewSet,
 )
+from bookings.api import GuestLinkRequestView, GuestProfileUpdateView, GuestProfileViewSet
 from trips.api import TripViewSet
 
 router = DefaultRouter()
@@ -28,6 +29,7 @@ router.register(
     GuideCalendarIntegrationViewSet,
     basename="auth-calendar-integrations",
 )
+router.register(r"guests", GuestProfileViewSet, basename="guest")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -45,5 +47,11 @@ urlpatterns = [
         name="auth-memberships",
     ),
     path("api/auth/me/", MeView.as_view(), name="auth-me"),
+    path("api/guest-links/", GuestLinkRequestView.as_view(), name="guest-link"),
+    path(
+        "api/guest-access/<str:token>/profile/",
+        GuestProfileUpdateView.as_view(),
+        name="guest-access-profile",
+    ),
     path("api/", include(router.urls)),
 ]

@@ -7,7 +7,8 @@ from django.utils import timezone
 
 from availability.models import GuideAvailability, GuideAvailabilityShare
 from accounts.models import ServiceMembership, User
-from bookings.models import Booking, GuestProfile
+from bookings.models import Booking, BookingGuest, GuestProfile
+from bookings.services.guest_tokens import issue_guest_access_token
 from orgs.models import GuideService
 from trips.models import Assignment, Trip
 
@@ -64,20 +65,28 @@ class Command(BaseCommand):
                 last_name="Flexible",
                 display_name="Finn Flexible",
             )
-            guest = self._ensure_user(
+            greta_guest, _ = GuestProfile.objects.update_or_create(
                 email="guest@example.test",
-                first_name="Greta",
-                last_name="Guest",
-                display_name="Greta Guest",
+                defaults={
+                    "first_name": "Greta",
+                    "last_name": "Guest",
+                    "phone": "555-0300",
+                },
             )
-            GuestProfile.objects.get_or_create(user=guest, defaults={"phone": "555-0300"})
+            friend_guest, _ = GuestProfile.objects.update_or_create(
+                email="friend@example.test",
+                defaults={
+                    "first_name": "Frank",
+                    "last_name": "Friend",
+                    "phone": "555-0301",
+                },
+            )
 
             self._ensure_membership(owner, summit_service, ServiceMembership.OWNER)
             self._ensure_membership(manager, summit_service, ServiceMembership.MANAGER)
             self._ensure_membership(guide, summit_service, ServiceMembership.GUIDE)
             self._ensure_membership(flex_guide, summit_service, ServiceMembership.GUIDE)
             self._ensure_membership(flex_guide, desert_service, ServiceMembership.GUIDE)
-            self._ensure_membership(guest, summit_service, ServiceMembership.GUEST)
 
             self.stdout.write(self.style.MIGRATE_HEADING("Ensuring admin superuser"))
             self._ensure_superuser()
@@ -165,10 +174,25 @@ class Command(BaseCommand):
                 defaults={"visibility": GuideAvailability.VISIBILITY_BUSY},
             )
 
-            Booking.objects.update_or_create(
+            Booking.objects.all().delete()
+
+            booking = Booking.objects.create(
                 trip=trad_trip,
-                guest=guest,
-                defaults={"party_size": 2, "status": Booking.PAID},
+                primary_guest=greta_guest,
+                party_size=2,
+                payment_status=Booking.PAID,
+                info_status=Booking.INFO_COMPLETE,
+                waiver_status=Booking.WAIVER_SIGNED,
+                last_guest_activity_at=timezone.now(),
+            )
+            BookingGuest.objects.create(booking=booking, guest=greta_guest, is_primary=True)
+            BookingGuest.objects.create(booking=booking, guest=friend_guest, is_primary=False)
+
+            issue_guest_access_token(
+                guest=greta_guest,
+                booking=booking,
+                expires_at=trad_trip.end + timedelta(days=1),
+                single_use=False,
             )
 
         self.stdout.write(self.style.SUCCESS("Development seed data created."))
