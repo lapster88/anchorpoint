@@ -1,16 +1,35 @@
 .PHONY: up down logs be shell fe
 
+ENV_FILE ?= .env
+
+# Resolve docker compose command depending on installed version.
+ifeq ($(shell docker compose version >/dev/null 2>&1 && echo ok),ok)
+DOCKER_COMPOSE_CMD := docker compose
+else ifeq ($(shell command -v docker-compose >/dev/null 2>&1 && echo ok),ok)
+DOCKER_COMPOSE_CMD := docker-compose
+else
+$(error Docker Compose is not installed. Install the Docker Compose plugin (`docker compose`) or the standalone `docker-compose` binary.)
+endif
+
+COMPOSE := $(DOCKER_COMPOSE_CMD) --env-file $(ENV_FILE) -f infra/docker-compose.yml
+
 up:
-	docker compose -f infra/docker-compose.yml up -d --build
+	$(COMPOSE) up -d --build
 
 down:
-	docker compose -f infra/docker-compose.yml down -v
+	$(COMPOSE) down -v
 
 logs:
-	docker compose -f infra/docker-compose.yml logs -f
+	$(COMPOSE) logs -f
 
 be:
-	docker compose -f infra/docker-compose.yml exec backend bash || true
+	$(COMPOSE) exec backend bash || true
+
+shell: be
 
 fe:
-	docker compose -f infra/docker-compose.yml exec frontend sh || true
+	$(COMPOSE) exec frontend sh || true
+
+e2e:
+	$(COMPOSE) up -d backend frontend
+	$(COMPOSE) run --rm playwright sh -lc "npm install -g pnpm && pnpm install && npx playwright install --with-deps && pnpm test:e2e"

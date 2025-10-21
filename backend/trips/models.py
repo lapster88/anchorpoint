@@ -21,8 +21,3 @@ class Assignment(models.Model):
     trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name='assignments')
     guide = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     role = models.CharField(max_length=10, choices=ROLES)
-
-class Availability(models.Model):
-    guide = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    start = models.DateField(); end = models.DateField()
-    available = models.BooleanField(default=True)

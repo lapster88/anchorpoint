@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
+import { useAuth } from '../../lib/auth'
 
 type Trip = {
   id: number
@@ -10,11 +11,15 @@ type Trip = {
 }
 
 export default function TripsList(){
+  const { isAuthenticated } = useAuth()
   const { data, isLoading, error } = useQuery({
     queryKey: ['trips'],
-    queryFn: async () => (await api.get('/api/trips/')).data
+    queryFn: async () => (await api.get('/api/trips/')).data,
+    // Avoid calling the API before the user completes authentication.
+    enabled: isAuthenticated
   })
 
+  if (!isAuthenticated) return null
   if (isLoading) return <div>Loading…</div>
   if (error) return <div className="text-red-600">Failed to load trips</div>
 

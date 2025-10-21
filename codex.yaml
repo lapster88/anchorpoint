@@ -1,0 +1,82 @@
+# codex.yaml
+# === Anchorpoint Project Configuration ===
+# This file helps Codex understand your stack, context, and commands.
+
+name: Anchorpoint
+description_file: docs/PROJECT_CONTEXT.md
+
+# --- Primary Languages and Frameworks ---
+languages:
+  - python
+  - typescript
+frameworks:
+  - django
+  - react
+
+# --- Project Layout ---
+backend:
+  path: backend
+  framework: django
+  entrypoint: manage.py
+  env_file: .env
+  run: make up         # or python manage.py runserver
+  test: pytest
+  lint: ruff check .
+
+frontend:
+  path: frontend
+  framework: react
+  package_manager: pnpm
+  run: pnpm dev --host
+  build: pnpm build
+  lint: pnpm lint
+  test: pnpm test
+
+infra:
+  docker_compose: infra/docker-compose.yml
+  makefile: Makefile
+
+# --- Context Awareness ---
+context:
+  description: |
+    Anchorpoint is a Django + React app for managing guided adventure trips.
+    The docs/PROJECT_CONTEXT.md file describes user roles (owners, office managers,
+    guides, guests), system flows, and API endpoints.
+    Auth currently uses JWT; consider upgrading to OAuth/OIDC provider for SSO in future iterations.
+    Availability design decisions are summarized in docs/design/availability.md.
+  keywords:
+    - guide service
+    - trip booking
+    - Stripe payments
+    - waivers
+    - Django REST Framework
+    - React dashboard
+    - Supabase
+    - JWT authentication
+
+# --- Developer Shortcuts ---
+commands:
+  start: make up
+  stop: make down
+  backend-shell: make be
+  frontend-shell: make fe
+  logs: make logs
+  migrate: docker compose -f infra/docker-compose.yml exec backend python manage.py migrate
+  seed: docker compose -f infra/docker-compose.yml exec backend python manage.py devseed
+
+# --- Optional CI configuration hints ---
+ci:
+  provider: github
+  workflows:
+    - path: .github/workflows/ci.yml
+      purpose: "Lint and test both backend and frontend"
+
+# --- Assistant Preferences ---
+assistant:
+  temperature: 0.3
+  code_style: concise
+  generate_tests: true
+  comment_guidelines:
+    summary: "Add concise docstrings or inline comments where context helps future readers."
+    backend: "Prefer Python docstrings for API/views/serializers describing intent and side-effects."
+    frontend: "Use JSDoc or targeted inline comments for hooks/components handling complex state or effects."

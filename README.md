@@ -33,6 +33,18 @@ npm i
 npm run dev -- --host
 ```
 
+## Testing
+```bash
+# Backend unit/integration tests
+docker compose --env-file .env -f infra/docker-compose.yml exec backend pytest
+
+# Frontend build check
+docker compose --env-file .env -f infra/docker-compose.yml exec frontend pnpm build
+
+# End-to-end (runs Playwright against the dockerized stack)
+make e2e
+```
+
 ## Next Steps
 1. Configure JWT auth endpoints (register/login/refresh).
 2. Implement service-scoped permissions and per-role dashboards.
