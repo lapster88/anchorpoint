@@ -30,6 +30,10 @@ shell: be
 fe:
 	$(COMPOSE) exec frontend sh || true
 
+test:
+	$(COMPOSE) exec backend pytest
+	$(COMPOSE) exec frontend pnpm build
+
 e2e:
 	$(COMPOSE) up -d backend frontend
 	$(COMPOSE) run --rm playwright sh -lc "npm install -g pnpm && pnpm install && npx playwright install --with-deps && pnpm test:e2e"

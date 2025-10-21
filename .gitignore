@@ -1,0 +1,15 @@
+# Node / pnpm runtime outputs
+frontend/node_modules/
+frontend/.pnpm-store/
+.pnpm-store/
+frontend/dist/
+frontend/test-results/
+
+# IDE project files
+.idea/
+
+# Python virtualenvs (if created locally)
+.venv/
+
+# MacOS metadata
+.DS_Store

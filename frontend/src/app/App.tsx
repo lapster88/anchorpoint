@@ -2,6 +2,7 @@ import { Routes, Route, Link } from 'react-router-dom'
 import AuthPage from '../features/auth/AuthPage'
 import TripsList from '../features/trips/TripsList'
 import ProfilePage from '../features/profile/ProfilePage'
+import GuideAvailabilityCalendar from '../features/availability/GuideAvailabilityCalendar'
 import { useAuth } from '../lib/auth'
 
 export default function App(){
@@ -23,6 +24,7 @@ export default function App(){
         <h1 className="text-2xl font-bold">Anchorpoint</h1>
         <nav className="space-x-4 flex items-center gap-3">
           <Link to="/" className="underline">Trips</Link>
+          <Link to="/calendar" className="underline">Calendar</Link>
           <Link to="/profile" className="underline">Profile</Link>
           <span className="text-sm text-gray-600">Signed in as {user?.display_name || user?.email}</span>
           <button type="button" onClick={handleLogout} className="text-sm underline text-red-600">Logout</button>
@@ -30,6 +32,7 @@ export default function App(){
       </header>
       <Routes>
         <Route path="/" element={<TripsList/>} />
+        <Route path="/calendar" element={<GuideAvailabilityCalendar/>} />
         <Route path="/profile" element={<ProfilePage/>} />
       </Routes>
     </div>

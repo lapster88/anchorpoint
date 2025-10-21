@@ -167,6 +167,61 @@ def test_availability_share_api(api_client, guide, guide_service_a, guide_servic
 
 
 @pytest.mark.django_db
+def test_availability_list_scoped_and_ordered(api_client, guide):
+    other = User.objects.create_user(
+        username="other@example.com",
+        email="other@example.com",
+        password="examplepass",
+        first_name="Other",
+        last_name="Guide",
+    )
+
+    first_start = timezone.now() + timezone.timedelta(days=1)
+    first_end = first_start + timezone.timedelta(hours=2)
+    second_start = first_start + timezone.timedelta(days=1)
+    second_end = second_start + timezone.timedelta(hours=3)
+
+    first = GuideAvailability.objects.create(
+        guide=guide,
+        start=first_start,
+        end=first_end,
+        is_available=True,
+        visibility=GuideAvailability.VISIBILITY_DETAIL,
+        source=GuideAvailability.SOURCE_MANUAL,
+        note="Morning window",
+    )
+    second = GuideAvailability.objects.create(
+        guide=guide,
+        start=second_start,
+        end=second_end,
+        is_available=False,
+        visibility=GuideAvailability.VISIBILITY_BUSY,
+        source=GuideAvailability.SOURCE_MANUAL,
+        note="Out guiding",
+    )
+    GuideAvailability.objects.create(
+        guide=other,
+        start=timezone.now() + timezone.timedelta(days=2),
+        end=timezone.now() + timezone.timedelta(days=2, hours=3),
+        is_available=True,
+        visibility=GuideAvailability.VISIBILITY_DETAIL,
+        source=GuideAvailability.SOURCE_MANUAL,
+    )
+
+    response = api_client.get("/api/auth/availabilities/")
+    assert response.status_code == 200
+
+    payload = response.data
+    if isinstance(payload, dict):
+        items = payload.get("results", [])
+    else:
+        items = payload
+
+    returned_ids = [item["id"] for item in items]
+    assert returned_ids == [first.id, second.id]
+
+
+@pytest.mark.django_db
 def test_calendar_integration_api(api_client, guide):
     create_response = api_client.post(
         "/api/auth/calendar-integrations/",
