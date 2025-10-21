@@ -1,6 +1,5 @@
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../lib/auth'
-import AvailabilityManager from './AvailabilityManager'
 import CalendarIntegrationManager from './CalendarIntegrationManager'
 
 type FormState = {
@@ -266,7 +265,6 @@ export default function ProfilePage() {
       </div>
 
       <div className="space-y-10 pt-6 border-t">
-        <AvailabilityManager />
         <CalendarIntegrationManager />
       </div>
     </div>
