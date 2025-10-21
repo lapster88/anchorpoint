@@ -1,5 +1,6 @@
-from django.db import models
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.db import models
 
 class Trip(models.Model):
     guide_service = models.ForeignKey('orgs.GuideService', on_delete=models.CASCADE)
@@ -14,6 +15,15 @@ class Trip(models.Model):
 
     def __str__(self):
         return f"{self.title} @ {self.location}"
+
+    def clean(self):
+        super().clean()
+        if self.start and self.end and self.end <= self.start:
+            raise ValidationError({"end": "End time must be after the start time."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 class Assignment(models.Model):
     LEAD='LEAD'; ASSIST='ASSIST'

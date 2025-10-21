@@ -58,6 +58,12 @@ DATABASES = {
     }
 }
 
+if env.bool('USE_SQLITE_DB', default=False):
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+
 AUTH_USER_MODEL = 'accounts.User'
 
 REST_FRAMEWORK = {
