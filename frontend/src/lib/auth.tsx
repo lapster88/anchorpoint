@@ -51,11 +51,19 @@ type SetAuthInput =
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
+// Hydrate persisted auth state once at module load and prime axios so the very first request
+// a component issues already includes the bearer token. Without this, queries fired during the
+// initial render could race the effect that sets the header, producing noisy 401s in the console.
+const initialAuthState = loadAuth()
+if (initialAuthState?.access) {
+  api.defaults.headers.common.Authorization = `Bearer ${initialAuthState.access}`
+}
+
 /**
  * Provides authenticated state, token lifecycle management, and storage sync.
  */
 export const AuthProvider = ({ children }: PropsWithChildren) => {
-  const [auth, setAuthState] = useState<StoredAuth | null>(() => loadAuth())
+  const [auth, setAuthState] = useState<StoredAuth | null>(() => initialAuthState)
   const queryClient = useQueryClient()
 
   const setAuth = useCallback(
