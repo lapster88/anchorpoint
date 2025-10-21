@@ -47,6 +47,7 @@ context:
     Session-specific workflow reminders live in docs/CODEX_NOTES.md — review this on init for Docker-first commands and testing tips.
     Local development and testing happen inside Docker; rely on the compose exec targets (`make be`, `make fe`, etc.) rather than running host binaries directly.
     New features must ship with accompanying automated tests (backend or frontend). Plan and implementation should include test coverage before calling the work complete.
+    Guest experience, token flow, and staff visibility decisions are documented in docs/design/guests.md — consult this when touching booking/guest logic.
   keywords:
     - guide service
     - trip booking

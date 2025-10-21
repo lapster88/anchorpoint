@@ -24,6 +24,7 @@
 - Frontend build check: `docker compose --env-file .env -f infra/docker-compose.yml exec frontend pnpm build`.
 - End-to-end baseline available via `make e2e` (boots backend/frontend, then runs Playwright container).
 - Policy: Every new feature or regression fix must land with automated test coverage (backend pytest, frontend unit, or e2e as appropriate). Update or add tests before marking work complete.
+- Guest workflows use tokenised magic links; see `docs/design/guests.md` before changing bookings or guest data flow.
 
 ## Sample Accounts
 - Superuser: `admin@summitguides.test` / `AdminAnchorpoint123!`
