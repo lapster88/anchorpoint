@@ -30,3 +30,35 @@ export async function listGuests(query: string): Promise<GuestProfile[]> {
 export async function requestGuestLink(payload: { guest_id: number; booking_id?: number; ttl_hours?: number }): Promise<void> {
   await api.post('/api/guest-links/', payload)
 }
+
+export type CreateBookingPayload = {
+  primary_guest: {
+    email: string
+    first_name?: string
+    last_name?: string
+    phone?: string
+    date_of_birth?: string
+    emergency_contact_name?: string
+    emergency_contact_phone?: string
+    medical_notes?: string
+    dietary_notes?: string
+  }
+  additional_guests?: Array<CreateBookingPayload['primary_guest']>
+  party_size?: number
+}
+
+export type CreateBookingResponse = {
+  id: number
+  trip: number
+  party_size: number
+  payment_status: string
+  info_status: string
+  waiver_status: string
+  payment_url: string | null
+  guest_portal_url: string | null
+}
+
+export async function createBooking(tripId: number, payload: CreateBookingPayload): Promise<CreateBookingResponse> {
+  const { data } = await api.post<CreateBookingResponse>(`/api/trips/${tripId}/bookings/`, payload)
+  return data
+}

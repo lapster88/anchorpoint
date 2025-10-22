@@ -1,6 +1,9 @@
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
+import { fetchMemberships, ServiceMembership } from '../profile/api'
+import CreateBookingForm from '../staff/CreateBookingForm'
 
 type Trip = {
   id: number
@@ -8,14 +11,21 @@ type Trip = {
   location: string
   start: string
   end: string
+  price_cents: number
 }
 
 export default function TripsList(){
   const { isAuthenticated } = useAuth()
+  const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null)
   const { data, isLoading, error } = useQuery({
     queryKey: ['trips'],
     queryFn: async () => (await api.get('/api/trips/')).data,
     // Avoid calling the API before the user completes authentication.
+    enabled: isAuthenticated
+  })
+  const { data: memberships } = useQuery({
+    queryKey: ['memberships'],
+    queryFn: fetchMemberships,
     enabled: isAuthenticated
   })
 
@@ -24,16 +34,42 @@ export default function TripsList(){
   if (error) return <div className="text-red-600">Failed to load trips</div>
 
   const results: Trip[] = data?.results || data
+  const canManageBookings = useMemo(() => {
+    return memberships?.some((m: ServiceMembership) => ['OWNER', 'OFFICE_MANAGER'].includes(m.role)) ?? false
+  }, [memberships])
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      {results?.map((t: Trip) => (
-        <div key={t.id} className="card">
-          <h3 className="text-xl font-semibold">{t.title}</h3>
-          <p>{t.location} · {new Date(t.start).toLocaleDateString()}</p>
-        </div>
-      ))}
-      {!results?.length && <div>No trips yet.</div>}
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-2">
+        {results?.map((t: Trip) => (
+          <div key={t.id} className="card space-y-2">
+            <h3 className="text-xl font-semibold">{t.title}</h3>
+            <p>{t.location} · {new Date(t.start).toLocaleDateString()}</p>
+            {canManageBookings && (
+              <button
+                type="button"
+                className="text-sm text-blue-600 underline"
+                onClick={() => setSelectedTrip(t)}
+              >
+                Create booking
+              </button>
+            )}
+          </div>
+        ))}
+        {!results?.length && <div>No trips yet.</div>}
+      </div>
+      {selectedTrip && canManageBookings && (
+        <CreateBookingForm
+          trip={{
+            id: selectedTrip.id,
+            title: selectedTrip.title,
+            start: selectedTrip.start,
+            end: selectedTrip.end,
+            price_cents: selectedTrip.price_cents
+          }}
+          onClose={() => setSelectedTrip(null)}
+        />
+      )}
     </div>
   )
 }

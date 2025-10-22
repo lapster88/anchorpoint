@@ -9,3 +9,4 @@ django-filter
 django-environ
 pytest
 pytest-django
+stripe

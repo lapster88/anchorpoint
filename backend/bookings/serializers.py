@@ -28,6 +28,7 @@ class BookingSummarySerializer(serializers.ModelSerializer):
 
 class GuestProfileSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(read_only=True)
+    bookings = BookingSummarySerializer(many=True, read_only=True)
 
     class Meta:
         model = GuestProfile
@@ -39,11 +40,13 @@ class GuestProfileSerializer(serializers.ModelSerializer):
             "full_name",
             "phone",
             "updated_at",
+            "bookings",
         ]
 
 
 class GuestProfileDetailSerializer(serializers.ModelSerializer):
-    bookings = BookingSummarySerializer(source="bookings", many=True, read_only=True)
+    bookings = BookingSummarySerializer(many=True, read_only=True)
+    full_name = serializers.CharField(read_only=True)
 
     class Meta:
         model = GuestProfile
@@ -52,6 +55,7 @@ class GuestProfileDetailSerializer(serializers.ModelSerializer):
             "email",
             "first_name",
             "last_name",
+            "full_name",
             "phone",
             "date_of_birth",
             "emergency_contact_name",
@@ -109,3 +113,46 @@ class GuestLinkRequestSerializer(serializers.Serializer):
         ttl_hours = ret.pop("ttl_hours", 24)
         ret["ttl"] = timedelta(hours=ttl_hours)
         return ret
+
+
+class GuestInputSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    first_name = serializers.CharField(required=False, allow_blank=True)
+    last_name = serializers.CharField(required=False, allow_blank=True)
+    phone = serializers.CharField(required=False, allow_blank=True)
+    date_of_birth = serializers.CharField(required=False, allow_blank=True)
+    emergency_contact_name = serializers.CharField(required=False, allow_blank=True)
+    emergency_contact_phone = serializers.CharField(required=False, allow_blank=True)
+    medical_notes = serializers.CharField(required=False, allow_blank=True)
+    dietary_notes = serializers.CharField(required=False, allow_blank=True)
+
+
+class BookingCreateSerializer(serializers.Serializer):
+    primary_guest = GuestInputSerializer()
+    additional_guests = GuestInputSerializer(many=True, required=False)
+    party_size = serializers.IntegerField(min_value=1, required=False)
+
+
+class BookingResponseSerializer(serializers.ModelSerializer):
+    payment_url = serializers.SerializerMethodField()
+    guest_portal_url = serializers.SerializerMethodField()
+    trip = serializers.IntegerField(source="trip_id", read_only=True)
+
+    class Meta:
+        model = Booking
+        fields = [
+            "id",
+            "trip",
+            "party_size",
+            "payment_status",
+            "info_status",
+            "waiver_status",
+            "payment_url",
+            "guest_portal_url",
+        ]
+
+    def get_payment_url(self, obj):
+        return getattr(obj, "_payment_url", None)
+
+    def get_guest_portal_url(self, obj):
+        return getattr(obj, "_guest_portal_url", None)

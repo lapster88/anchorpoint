@@ -5,5 +5,6 @@ class Payment(models.Model):
     amount_cents = models.PositiveIntegerField()
     currency = models.CharField(max_length=10, default='usd')
     stripe_payment_intent = models.CharField(max_length=200)
+    stripe_checkout_session = models.CharField(max_length=255, blank=True)
     status = models.CharField(max_length=30)
     created_at = models.DateTimeField(auto_now_add=True)
