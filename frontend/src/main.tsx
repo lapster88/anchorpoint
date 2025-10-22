@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import App from './app/App'
+import GuestTokenPage from './features/guests/GuestTokenPage'
 import './index.css'
 import { AuthProvider } from './lib/auth'
 
@@ -13,6 +14,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <AuthProvider>
         <BrowserRouter>
           <Routes>
+            <Route path="/guest" element={<GuestTokenPage/>} />
             <Route path="/*" element={<App/>} />
           </Routes>
         </BrowserRouter>
