@@ -94,6 +94,16 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
   useEffect(() => {
     let refreshRequest: Promise<string> | null = null
 
+    const hasInterceptors =
+      api &&
+      api.interceptors &&
+      typeof api.interceptors.request?.use === 'function' &&
+      typeof api.interceptors.response?.use === 'function'
+
+    if (!hasInterceptors) {
+      return () => {}
+    }
+
     const requestInterceptor = api.interceptors.request.use(config => {
       if (auth?.access) {
         config.headers = {

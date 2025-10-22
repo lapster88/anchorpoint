@@ -99,7 +99,7 @@ export default function CreateBookingForm({ trip, onClose }: Props){
         <p className="text-sm text-gray-600">Trip date: {new Date(trip.start).toLocaleDateString()} · ${ (trip.price_cents / 100).toFixed(2) } per guest</p>
       </header>
 
-      <form className="space-y-6" onSubmit={handleSubmit}>
+      <form className="space-y-6" onSubmit={handleSubmit} noValidate>
         <section className="space-y-3">
           <h3 className="font-medium">Primary guest</h3>
           <div className="grid md:grid-cols-2 gap-3">
