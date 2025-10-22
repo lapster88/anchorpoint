@@ -120,6 +120,14 @@ erDiagram
 ---
 
 ## Open Items & Future Enhancements
+- **Email notifications** drive much of this workflow. We will introduce a multi-tenant email layer:
+  - Store per-service sender info (e.g., `notification_email`, display name, optional provider credentials) on `GuideService` or related table.
+  - Use a transactional provider (Postmark, SendGrid, Mailgun, etc.) that supports unique from addresses per message.
+  - Queue outbound email jobs (Celery/Redis or similar) so booking flows remain fast.
+  - Maintain a template registry keyed by event type (booking_confirmation, payment_reminder, info/waiver reminder). Allow `GuideService` overrides.
+  - Embed the guest magic link in all guest-facing emails; tokens expire one day after trip end.
+  - Log each send (message id, provider response) for support/debugging.
+  - Provide UI to manually resend links/notifications in the future.
 - **Multiple guests self-serve**: allow primary guest to add/remove party members in portal.
 - **Payment balance**: support deposits, late balance payments, and partial refunds.
 - **Trip capacity automation**: automatically prevent new bookings once capacity reached.
@@ -128,4 +136,3 @@ erDiagram
 - **Staff notifications**: alerts/slack/email when guests finish info/waiver or when bookings remain unstaffed.
 
 Keep this document updated as workflows evolve and new requirements emerge.
-
