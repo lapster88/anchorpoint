@@ -5,6 +5,11 @@ Anchorpoint is a web platform for managing guided adventure trips. It supports m
 
 The system is **Python-first**, with a Django REST Framework backend and a React frontend.
 
+### Reference Design Docs
+- `docs/design/guests.md` — guest access tokens, magic-link flows, staff visibility
+- `docs/design/availability.md` — guide availability & calendar integration
+- `docs/design/bookings.md` — booking workflows, notifications, staffing roadmap
+
 ---
 
 ## Tech Stack
@@ -103,14 +108,22 @@ Users can belong to multiple guide services with different roles.
 - `visibility` defaults to `busy` (other services see busy/free only); `GuideAvailabilityShare` rows allow per-service overrides
 - External calendar integrations (`GuideCalendarIntegration`, `GuideCalendarEvent`) convert synced events into availability slots
 
+### GuestProfile
+- Canonical guest record (email, first/last name, phone, DOB, emergency + medical/dietary notes)
+- Updated via guest portal magic links or staff edits
+- Linked to bookings through `primary_guest` and `BookingGuest`
+
 ### Booking
-- `trip` (FK), `guest` (FK to User)
-- `party_size`, `status` in `{PENDING, PAID, CANCELLED}`
-- `created_at`
+- `trip` (FK) and `primary_guest` (FK to GuestProfile)
+- `party_size` (covers self + additional guests)
+- Statuses tracked independently: `payment_status`, `info_status`, `waiver_status`
+- `last_guest_activity_at` updated when guests submit info/waivers
+- Related `BookingGuest` rows link every attendee to the booking (and note the primary guest)
+- Magic-link tokens issued via `GuestAccessToken`
 
 ### Payment
 - Linked to a `Booking`
-- `amount_cents`, `currency`, `stripe_payment_intent`, `status`, `created_at`
+- `amount_cents`, `currency`, `stripe_payment_intent`, `stripe_checkout_session`, `status`, `created_at`
 
 ### Waiver
 - One-to-one with `Booking`
@@ -171,9 +184,13 @@ Users can belong to multiple guide services with different roles.
 
 - `GET/POST/PATCH /trips/`  
 - `GET/POST/PATCH /bookings/`  
+- `POST /trips/<id>/bookings/` (staff-driven booking creation)  
 - `GET/POST /payments/checkout-session` (server-initiated Stripe Checkout)  
 - `POST /webhooks/stripe`  
 - `POST /webhooks/waivers`  
+- `GET /guests/` (staff directory)
+- `POST /guest-links/` (email magic links)
+- `PATCH /guest-access/<token>/profile/`
 
 ---
 

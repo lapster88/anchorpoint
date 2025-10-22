@@ -25,6 +25,7 @@
 - End-to-end baseline available via `make e2e` (boots backend/frontend, then runs Playwright container).
 - Policy: Every new feature or regression fix must land with automated test coverage (backend pytest, frontend unit, or e2e as appropriate). Update or add tests before marking work complete.
 - Guest workflows use tokenised magic links; see `docs/design/guests.md` before changing bookings or guest data flow.
+- Booking/payment/email architecture is summarised in `docs/PROJECT_CONTEXT.md` with detail in `docs/design/bookings.md`.
 
 ## Sample Accounts
 - Superuser: `admin@summitguides.test` / `AdminAnchorpoint123!`
@@ -40,6 +41,6 @@
 - Always review `codex.yaml` and `docs/PROJECT_CONTEXT.md` before coding to confirm stack assumptions.
 - Confirm whether commands should run on host vs. Docker container; prefer containerized workflows unless explicitly told otherwise.
 - When adding dependencies, install them through the appropriate container (`frontend` for pnpm, `backend` for pip) to keep lockfiles consistent.
-- Frontend work should include inline comments for complex hooks/memoised logic—do a quick pass before committing to ensure the intent is documented.
+- Frontend work should include inline comments for complex hooks/memoised logic—do a quick pass before committing to ensure the intent is documented (see `codex.yaml` comment guidelines).
 - Backend tests now live alongside their apps (`accounts/tests`, `trips/tests`, etc.); place new coverage next to the feature under test.
 - Keep an eye on mounted volumes (`frontend/dist`, `.pnpm-store`, etc.) that appear untracked—avoid committing them.
