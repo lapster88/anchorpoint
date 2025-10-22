@@ -86,12 +86,10 @@ function AvailabilityRow({ availability, memberships, onUpdate, onDelete }: Avai
   const [shareServiceId, setShareServiceId] = useState('')
   const [shareVisibility, setShareVisibility] = useState<'private' | 'busy' | 'detail'>('busy')
 
-  // Only allow adding overrides for services that do not already have explicit visibility rows.
   const availableMembershipOptions = memberships.filter(
     membership => !shares?.some(share => share.guide_service === membership.guide_service)
   )
 
-  // Persist row edits without refreshing the entire list; on success the query cache is invalidated.
   const handleSave = async () => {
     setSaving(true)
     await onUpdate(availability.id, {

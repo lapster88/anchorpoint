@@ -104,8 +104,6 @@ export default function GuideAvailabilityCalendar(){
     [membershipsQuery.data]
   )
 
-  // React-big-calendar expects plain event objects; normalise API payloads once so we can render,
-  // reuse in overlap checks, and avoid re-parsing dates inside the component tree.
   const events: CalendarEvent[] = useMemo(() => {
     return availability
       .map((slot) => {
@@ -133,7 +131,6 @@ export default function GuideAvailabilityCalendar(){
   }, [availability])
 
   const createMutation = useMutation({
-    // Creating availability triggers a refetch for the calendar list so every view stays in sync.
     mutationFn: async (payload: Record<string, unknown>) => (await api.post('/api/auth/availabilities/', payload)).data,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['guide-availability'] })
