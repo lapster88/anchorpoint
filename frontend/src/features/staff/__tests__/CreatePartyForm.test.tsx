@@ -1,12 +1,13 @@
+import React from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { vi } from 'vitest'
 
-import CreateBookingForm from '../CreateBookingForm'
+import CreatePartyForm from '../CreatePartyForm'
 
 vi.mock('../api', () => ({
-  createBooking: vi.fn()
+  createParty: vi.fn()
 }))
 
 vi.mock('../../../../lib/api', () => ({
@@ -25,15 +26,15 @@ const trip = {
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
-function renderForm(){
+function renderForm(extraProps: Partial<React.ComponentProps<typeof CreatePartyForm>> = {}){
   return render(
     <QueryClientProvider client={queryClient}>
-      <CreateBookingForm trip={trip} onClose={() => {}} />
+      <CreatePartyForm trip={trip} onClose={() => {}} {...extraProps} />
     </QueryClientProvider>
   )
 }
 
-describe('CreateBookingForm', () => {
+describe('CreatePartyForm', () => {
   afterEach(() => {
     queryClient.clear()
     vi.clearAllMocks()
@@ -42,7 +43,7 @@ describe('CreateBookingForm', () => {
   it('requires primary guest email', async () => {
     renderForm()
 
-    await userEvent.click(screen.getByText('Create booking'))
+    await userEvent.click(screen.getByText('Create party'))
 
     await waitFor(() => {
       expect(screen.getByText('Primary guest email is required.')).toBeInTheDocument()
@@ -50,8 +51,8 @@ describe('CreateBookingForm', () => {
   })
 
   it('submits booking and shows links', async () => {
-    const { createBooking } = await import('../api')
-    createBooking.mockResolvedValueOnce({
+    const { createParty } = await import('../api')
+    createParty.mockResolvedValueOnce({
       id: 1,
       trip: 1,
       party_size: 1,
@@ -64,21 +65,44 @@ describe('CreateBookingForm', () => {
 
     renderForm()
     await userEvent.type(screen.getByLabelText(/^Email/), 'guest@example.com')
-    await userEvent.click(screen.getByText('Create booking'))
+    await userEvent.click(screen.getByText('Create party'))
 
-    expect(await screen.findByText(/Booking created/)).toBeInTheDocument()
+    expect(await screen.findByText(/Party created/)).toBeInTheDocument()
     expect(screen.getByText(/https:\/\/stripe\.test/)).toBeInTheDocument()
     expect(screen.getByText(/https:\/\/app\.test\/guest/)).toBeInTheDocument()
   })
 
   it('handles API errors', async () => {
-    const { createBooking } = await import('../api')
-    createBooking.mockRejectedValueOnce({ response: { data: { detail: 'Trip full' } } })
+    const { createParty } = await import('../api')
+    createParty.mockRejectedValueOnce({ response: { data: { detail: 'Trip full' } } })
 
     renderForm()
     await userEvent.type(screen.getByLabelText(/^Email/), 'guest@example.com')
-    await userEvent.click(screen.getByText('Create booking'))
+    await userEvent.click(screen.getByText('Create party'))
 
     expect(await screen.findByText('Trip full')).toBeInTheDocument()
+  })
+
+  it('invokes onCreated callback', async () => {
+    const onCreated = vi.fn()
+    const { createParty } = await import('../api')
+    createParty.mockResolvedValueOnce({
+      id: 2,
+      trip: 1,
+      party_size: 1,
+      payment_status: 'PENDING',
+      info_status: 'PENDING',
+      waiver_status: 'PENDING',
+      payment_url: null,
+      guest_portal_url: null
+    })
+
+    renderForm({ onCreated })
+    await userEvent.type(screen.getByLabelText(/^Email/), 'guest@example.com')
+    await userEvent.click(screen.getByText('Create party'))
+
+    await waitFor(() => {
+      expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ id: 2 }))
+    })
   })
 })

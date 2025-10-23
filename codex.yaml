@@ -44,13 +44,14 @@ context:
     guides, guests), system flows, and API endpoints.
     Auth currently uses JWT; consider upgrading to OAuth/OIDC provider for SSO in future iterations.
     Availability design decisions are summarized in docs/design/availability.md.
-    Session-specific workflow reminders live in docs/CODEX_NOTES.md — review this on init for Docker-first commands and testing tips.
+    Session-specific workflow + condensed conversation notes live in docs/CODEX_NOTES.md — review/update this on init so we keep context small without losing decisions.
     Local development and testing happen inside Docker; rely on the compose exec targets (`make be`, `make fe`, etc.) rather than running host binaries directly.
     New features must ship with accompanying automated tests (backend or frontend). Plan and implementation should include test coverage before calling the work complete.
-    Guest experience, token flow, and staff visibility decisions are documented in docs/design/guests.md — consult this when touching booking/guest logic.
+    Trip/party strategy (staff workflow first, Stripe stub interfaces, email identity plan, waiver provider abstraction) is captured in docs/design/parties.md.
+    Guest experience, token flow, and staff visibility decisions are documented in docs/design/guests.md — consult this when touching party/guest logic.
   keywords:
     - guide service
-    - trip booking
+    - trip party
     - Stripe payments
     - waivers
     - Django REST Framework

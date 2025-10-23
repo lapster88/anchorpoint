@@ -83,18 +83,18 @@ function GuestCard({ guest, onSendLink, sending }: GuestCardProps){
         </button>
       </div>
 
-      {guest.bookings?.length ? (
+      {guest.parties?.length ? (
         <div className="text-sm text-gray-700 space-y-1">
           <p className="font-medium">Trip history</p>
           <ul className="space-y-2">
-            {guest.bookings.map(booking => (
-              <li key={booking.id} className="border rounded px-3 py-2 bg-slate-50">
-                <p className="font-medium">{booking.trip_title}</p>
+            {guest.parties.map(party => (
+              <li key={party.id} className="border rounded px-3 py-2 bg-slate-50">
+                <p className="font-medium">{party.trip_title}</p>
                 <p className="text-xs text-gray-600">
-                  {new Date(booking.trip_start).toLocaleDateString()} – {new Date(booking.trip_end).toLocaleDateString()}
+                  {new Date(party.trip_start).toLocaleDateString()} – {new Date(party.trip_end).toLocaleDateString()}
                 </p>
                 <p className="text-xs text-gray-600">
-                  Payment: {booking.payment_status} · Waiver: {booking.waiver_status} · Info: {booking.info_status}
+                  Payment: {party.payment_status} · Waiver: {party.waiver_status} · Info: {party.info_status}
                 </p>
               </li>
             ))}

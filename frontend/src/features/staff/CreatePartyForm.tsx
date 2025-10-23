@@ -1,19 +1,23 @@
 import { useMemo, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 
-import { CreateBookingPayload, CreateBookingResponse, createBooking } from './api'
+import { CreatePartyPayload, CreatePartyResponse, createParty } from './api'
 
 export type TripSummary = {
   id: number
   title: string
+  location?: string
   start: string
   end: string
   price_cents: number
+  guide_service?: number
+  guide_service_name?: string
 }
 
 type Props = {
   trip: TripSummary
   onClose: () => void
+  onCreated?: (party: CreatePartyResponse) => void
 }
 
 type GuestForm = {
@@ -25,21 +29,22 @@ type GuestForm = {
 
 const emptyGuest: GuestForm = { email: '', first_name: '', last_name: '', phone: '' }
 
-export default function CreateBookingForm({ trip, onClose }: Props){
+export default function CreatePartyForm({ trip, onClose, onCreated }: Props){
   const [primary, setPrimary] = useState<GuestForm>(emptyGuest)
   const [additionalGuests, setAdditionalGuests] = useState<GuestForm[]>([])
   const [partySize, setPartySize] = useState<number | ''>('')
   const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<CreateBookingResponse | null>(null)
+  const [result, setResult] = useState<CreatePartyResponse | null>(null)
 
   const mutation = useMutation({
-    mutationFn: (payload: CreateBookingPayload) => createBooking(trip.id, payload),
+    mutationFn: (payload: CreatePartyPayload) => createParty(trip.id, payload),
     onSuccess: (data) => {
       setResult(data)
       setError(null)
+      onCreated?.(data)
     },
     onError: (err: any) => {
-      const detail = err?.response?.data?.detail || err?.message || 'Unable to create booking.'
+      const detail = err?.response?.data?.detail || err?.message || 'Unable to create party.'
       setError(String(detail))
       setResult(null)
     }
@@ -80,7 +85,7 @@ export default function CreateBookingForm({ trip, onClose }: Props){
       .filter(guest => guest.email.trim())
       .map(guest => ({ ...guest }))
 
-    const payload: CreateBookingPayload = {
+    const payload: CreatePartyPayload = {
       primary_guest: { ...primary },
       additional_guests: extraGuests.length ? extraGuests : undefined,
       party_size: typeof partySize === 'number' ? partySize : undefined
@@ -95,8 +100,8 @@ export default function CreateBookingForm({ trip, onClose }: Props){
   return (
     <div className="border rounded-lg bg-white shadow-md p-6 space-y-5">
       <header className="space-y-1">
-        <h2 className="text-xl font-semibold">Create booking for {trip.title}</h2>
-        <p className="text-sm text-gray-600">Trip date: {new Date(trip.start).toLocaleDateString()} · ${ (trip.price_cents / 100).toFixed(2) } per guest</p>
+        <h2 className="text-xl font-semibold">Create party for {trip.title}</h2>
+        <p className="text-sm text-gray-600">Trip date: {new Date(trip.start).toLocaleDateString()} · ${(trip.price_cents / 100).toFixed(2)} per guest</p>
       </header>
 
       <form className="space-y-6" onSubmit={handleSubmit} noValidate>
@@ -148,11 +153,11 @@ export default function CreateBookingForm({ trip, onClose }: Props){
         </section>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
-        {mutation.isError && !error && <p className="text-sm text-red-600">Unable to create booking.</p>}
+        {mutation.isError && !error && <p className="text-sm text-red-600">Unable to create party.</p>}
 
         <div className="flex items-center gap-3">
           <button type="submit" disabled={mutation.isLoading} className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-70">
-            {mutation.isLoading ? 'Creating…' : 'Create booking'}
+            {mutation.isLoading ? 'Creating…' : 'Create party'}
           </button>
           <button type="button" onClick={onClose} className="text-sm underline text-gray-600">Cancel</button>
         </div>
@@ -160,7 +165,7 @@ export default function CreateBookingForm({ trip, onClose }: Props){
 
       {result && (
         <section className="space-y-3 border-t pt-4">
-          <h3 className="font-medium">Booking created</h3>
+          <h3 className="font-medium">Party created</h3>
           <p className="text-sm text-gray-700">Share these links with the primary guest:</p>
           <LinkRow label="Payment" url={paymentLink} />
           <LinkRow label="Guest details" url={guestLink} />

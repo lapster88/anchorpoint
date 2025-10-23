@@ -8,7 +8,7 @@ The system is **Python-first**, with a Django REST Framework backend and a React
 ### Reference Design Docs
 - `docs/design/guests.md` — guest access tokens, magic-link flows, staff visibility
 - `docs/design/availability.md` — guide availability & calendar integration
-- `docs/design/bookings.md` — booking workflows, notifications, staffing roadmap
+- `docs/design/parties.md` — trip party workflows, notifications, staffing roadmap
 
 ---
 
@@ -183,8 +183,10 @@ Users can belong to multiple guide services with different roles.
 - `POST /auth/refresh` — refresh token  
 
 - `GET/POST/PATCH /trips/`  
-- `GET/POST/PATCH /bookings/`  
-- `POST /trips/<id>/bookings/` (staff-driven booking creation)  
+- `GET/POST/PATCH /parties/` (internal API, staff surface uses trip endpoints)
+- `POST /trips/<id>/parties/` (staff-driven party creation)
+- `GET /trips/service/<id>/guides/` (list assignable guides for a guide service)
+- `POST /trips/<id>/assign-guide/` (set or clear the lead guide assignment)
 - `GET/POST /payments/checkout-session` (server-initiated Stripe Checkout)  
 - `POST /webhooks/stripe`  
 - `POST /webhooks/waivers`  

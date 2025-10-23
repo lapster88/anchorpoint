@@ -63,8 +63,8 @@
 - `POST /guest/:token/waiver` → marks waiver complete (or proxies to provider).
 
 ### Staff Endpoints (Authenticated)
-- `GET /api/guests/:id` → view profile, bookings, waiver/payment status.
-- `GET /api/bookings/:id/guests` → list guests on a trip with readiness indicators.
+- `GET /api/guests/:id` → view profile, parties, waiver/payment status.
+- `GET /api/trips/:id/parties/` → list parties (and their guests) on a trip with readiness indicators.
 - `GET /api/guests?query=` → search by email/name and show history.
 
 ---

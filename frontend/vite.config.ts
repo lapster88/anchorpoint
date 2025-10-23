@@ -12,6 +12,20 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
     globals: true,
-    exclude: ['e2e/**', 'node_modules/**', 'dist/**']
+    exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html', 'lcov'],
+      reportsDirectory: './coverage',
+      all: true,
+      enabled: true,
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        'src/test/**',
+        'src/**/*.d.ts',
+        'src/**/*.stories.*',
+        'src/**/__tests__/**'
+      ]
+    }
   }
 })

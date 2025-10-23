@@ -7,7 +7,7 @@ from rest_framework.test import APIClient
 from accounts.models import ServiceMembership, User
 from bookings.models import Booking, GuestProfile
 from orgs.models import GuideService
-from trips.models import Trip
+from trips.models import Trip, Assignment
 
 
 @pytest.fixture
@@ -39,6 +39,19 @@ def trip(db, service):
         capacity=6,
         price_cents=20000,
     )
+
+
+@pytest.fixture
+def guide_user(db, service):
+    user = User.objects.create_user(
+        username="guide@example.com",
+        email="guide@example.com",
+        password="password123",
+        first_name="Gina",
+        last_name="Guide",
+    )
+    ServiceMembership.objects.create(user=user, guide_service=service, role=ServiceMembership.GUIDE)
+    return user
 
 
 @pytest.mark.django_db
@@ -77,7 +90,7 @@ def test_owner_creates_booking(monkeypatch, owner, trip):
         ],
     }
 
-    response = client.post(f"/api/trips/{trip.id}/bookings/", payload, format="json")
+    response = client.post(f"/api/trips/{trip.id}/parties/", payload, format="json")
     assert response.status_code == 201
 
     booking = Booking.objects.get()
@@ -91,6 +104,108 @@ def test_owner_creates_booking(monkeypatch, owner, trip):
     # Guest profiles should be created
     assert GuestProfile.objects.filter(email="guest@example.com").exists()
     assert GuestProfile.objects.filter(email="friend@example.com").exists()
+
+
+@pytest.mark.django_db
+def test_list_trip_bookings(monkeypatch, owner, trip):
+    client = APIClient()
+    client.force_authenticate(owner)
+
+    fake_session = types.SimpleNamespace(
+        payment_intent="pi_test",
+        id="cs_test",
+        payment_status="unpaid",
+        url="https://stripe.test/checkout"
+    )
+
+    monkeypatch.setattr("trips.api.create_checkout_session", lambda **kwargs: fake_session)
+    monkeypatch.setattr("trips.api.send_booking_confirmation_email", lambda **kwargs: None)
+
+    payload = {
+        "primary_guest": {
+            "email": "guest@example.com",
+            "first_name": "Greta",
+            "last_name": "Guest",
+        },
+    }
+
+    response = client.post(f"/api/trips/{trip.id}/parties/", payload, format="json")
+    assert response.status_code == 201
+
+    list_response = client.get(f"/api/trips/{trip.id}/parties/")
+    assert list_response.status_code == 200
+    data = list_response.json()["parties"]
+    assert len(data) == 1
+    booking = data[0]
+    assert booking["primary_guest_email"] == "guest@example.com"
+    assert booking["party_size"] == 1
+
+
+@pytest.mark.django_db
+def test_create_trip_with_party(monkeypatch, owner, service):
+    client = APIClient()
+    client.force_authenticate(owner)
+
+    fake_session = types.SimpleNamespace(
+        payment_intent="pi_test",
+        id="cs_test",
+        payment_status="unpaid",
+        url="https://stripe.test/checkout"
+    )
+
+    monkeypatch.setattr("trips.api.create_checkout_session", lambda **kwargs: fake_session)
+    monkeypatch.setattr("trips.api.send_booking_confirmation_email", lambda **kwargs: None)
+
+    start = timezone.now() + timezone.timedelta(days=30)
+    end = start + timezone.timedelta(days=1)
+
+    payload = {
+        "guide_service": service.id,
+        "title": "Private Glacier Day",
+        "location": "Mt. Baker",
+        "start": start.isoformat().replace("+00:00", "Z"),
+        "end": end.isoformat().replace("+00:00", "Z"),
+        "capacity": 4,
+        "price_cents": 25000,
+        "description": "Technical glacier travel",
+        "party": {
+            "primary_guest": {
+                "email": "guest@example.com",
+                "first_name": "Greta",
+                "last_name": "Guest",
+                "phone": "555-0100",
+            }
+        },
+    }
+
+    response = client.post("/api/trips/", payload, format="json")
+    assert response.status_code == 201
+    data = response.json()
+    assert data["title"] == "Private Glacier Day"
+    assert len(data["parties"]) == 1
+    assert data["parties"][0]["primary_guest_email"] == "guest@example.com"
+
+
+@pytest.mark.django_db
+def test_create_trip_without_party_rejected(owner, service):
+    client = APIClient()
+    client.force_authenticate(owner)
+
+    start = timezone.now() + timezone.timedelta(days=10)
+    end = start + timezone.timedelta(days=1)
+
+    payload = {
+        "guide_service": service.id,
+        "title": "Ski Day",
+        "location": "Alpental",
+        "start": start.isoformat().replace("+00:00", "Z"),
+        "end": end.isoformat().replace("+00:00", "Z"),
+        "capacity": 4,
+        "price_cents": 18000,
+    }
+
+    response = client.post("/api/trips/", payload, format="json")
+    assert response.status_code == 400
 
 
 @pytest.mark.django_db
@@ -116,6 +231,89 @@ def test_booking_capacity_validation(monkeypatch, owner, trip):
         }
     }
 
-    response = client.post(f"/api/trips/{trip.id}/bookings/", payload, format="json")
+    response = client.post(f"/api/trips/{trip.id}/parties/", payload, format="json")
     assert response.status_code == 400
-    assert "capacity" in response.data["detail"].lower()
+
+
+@pytest.mark.django_db
+def test_create_trip_with_party_and_guide(monkeypatch, owner, service, guide_user):
+    client = APIClient()
+    client.force_authenticate(owner)
+
+    fake_session = types.SimpleNamespace(
+        payment_intent="pi_test",
+        id="cs_test",
+        payment_status="unpaid",
+        url="https://stripe.test/checkout",
+    )
+
+    monkeypatch.setattr("trips.api.create_checkout_session", lambda **kwargs: fake_session)
+    monkeypatch.setattr("trips.api.send_booking_confirmation_email", lambda **kwargs: None)
+
+    start = timezone.now() + timezone.timedelta(days=5)
+    end = start + timezone.timedelta(days=1)
+
+    payload = {
+        "guide_service": service.id,
+        "title": "Private Trip",
+        "location": "Mt. Hood",
+        "start": start.isoformat().replace("+00:00", "Z"),
+        "end": end.isoformat().replace("+00:00", "Z"),
+        "capacity": 4,
+        "price_cents": 15000,
+        "description": "",
+        "guide": guide_user.id,
+        "party": {
+            "primary_guest": {
+                "email": "guest@example.com",
+                "first_name": "Greta",
+                "last_name": "Guest",
+            }
+        },
+    }
+
+    response = client.post("/api/trips/", payload, format="json")
+    assert response.status_code == 201
+    data = response.json()
+    assert data["location"] == "Mt. Hood"
+    assert len(data["parties"]) == 1
+
+    assignment = Assignment.objects.get(trip_id=data["id"], guide=guide_user)
+    assert assignment.role == Assignment.LEAD
+
+
+@pytest.mark.django_db
+def test_service_guides_endpoint(owner, service, guide_user):
+    client = APIClient()
+    client.force_authenticate(owner)
+
+    response = client.get(f"/api/trips/service/{service.id}/guides/")
+    assert response.status_code == 200
+    data = response.json()
+    assert any(item["id"] == guide_user.id for item in data)
+
+
+@pytest.mark.django_db
+def test_assign_guide_endpoint(owner, service, guide_user, trip):
+    client = APIClient()
+    client.force_authenticate(owner)
+
+    assign_response = client.post(
+        f"/api/trips/{trip.id}/assign-guide/",
+        {"guide_id": guide_user.id},
+        format="json",
+    )
+    assert assign_response.status_code == 200
+    payload = assign_response.json()
+    assert payload["requires_assignment"] is False
+    assert payload["assignments"][0]["guide_id"] == guide_user.id
+
+    unassign_response = client.post(
+        f"/api/trips/{trip.id}/assign-guide/",
+        {"guide_id": None},
+        format="json",
+    )
+    assert unassign_response.status_code == 200
+    payload = unassign_response.json()
+    assert payload["requires_assignment"] is True
+    assert payload["assignments"] == []

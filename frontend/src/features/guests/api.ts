@@ -11,7 +11,7 @@ export type FetchGuestProfileResponse = {
   emergency_contact_phone: string | null
   medical_notes: string | null
   dietary_notes: string | null
-  bookings: Array<{
+  parties: Array<{
     id: number
     trip_title: string
     trip_start: string

@@ -93,6 +93,7 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 STRIPE_SECRET_KEY = env('STRIPE_SECRET_KEY', default='')
+STRIPE_USE_STUB = env.bool('STRIPE_USE_STUB', default=True)
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
 EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Anchorpoint <notifications@anchorpoint.app>')

@@ -6,16 +6,20 @@ from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from accounts.models import ServiceMembership
+from accounts.models import ServiceMembership, User
 from bookings.models import Booking, BookingGuest
-from bookings.serializers import BookingCreateSerializer, BookingResponseSerializer
+from bookings.serializers import (
+    BookingCreateSerializer,
+    BookingResponseSerializer,
+    TripPartySerializer,
+)
 from bookings.services.emails import send_booking_confirmation_email
 from bookings.services.guest_tokens import issue_guest_access_token
 from bookings.services.guests import upsert_guest_profile
 from bookings.services.payments import create_checkout_session
 from payments.models import Payment
-from .models import Trip
-from .serializers import TripSerializer
+from .models import Trip, Assignment
+from .serializers import TripSerializer, TripCreateSerializer, GuideSummarySerializer
 
 
 class TripViewSet(viewsets.ModelViewSet):
@@ -27,7 +31,12 @@ class TripViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        base_queryset = Trip.objects.all().order_by("start")
+        base_queryset = Trip.objects.all().order_by("start").prefetch_related(
+            "bookings__primary_guest",
+            "bookings__booking_guests__guest",
+            "bookings__payments",
+            "assignments__guide",
+        )
 
         if user.is_superuser:
             return base_queryset
@@ -57,15 +66,13 @@ class TripViewSet(viewsets.ModelViewSet):
             is_active=True,
         ).exists()
 
-    @action(detail=True, methods=["post"], url_path="bookings")
-    def create_booking(self, request, pk=None):
-        trip = self.get_object()
-        if not self._user_can_manage_trip(request.user, trip):
-            return Response({"detail": "Not permitted."}, status=status.HTTP_403_FORBIDDEN)
+    def get_serializer_class(self):
+        if self.action == "create":
+            return TripCreateSerializer
+        return super().get_serializer_class()
 
-        serializer = BookingCreateSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        payload = serializer.validated_data
+    def _create_party_instance(self, *, trip, party_data):
+        payload = party_data
 
         primary_guest = upsert_guest_profile(payload["primary_guest"])
         additional_guests_data = payload.get("additional_guests", [])
@@ -82,7 +89,7 @@ class TripViewSet(viewsets.ModelViewSet):
             or 0
         )
         if total_reserved + party_size > trip.capacity:
-            return Response({"detail": "Trip capacity would be exceeded."}, status=status.HTTP_400_BAD_REQUEST)
+            raise ValueError("capacity exceeded")
 
         booking = Booking.objects.create(
             trip=trip,
@@ -116,7 +123,7 @@ class TripViewSet(viewsets.ModelViewSet):
             single_use=False,
         )
         guest_portal_url = f"{settings.FRONTEND_URL}/guest?token={raw_token}"
-        payment_url = checkout_session.url
+        payment_url = getattr(checkout_session, "url", None)
 
         recipient_emails = [guest.email for guest in guests if guest.email]
         if recipient_emails:
@@ -129,5 +136,121 @@ class TripViewSet(viewsets.ModelViewSet):
 
         booking._payment_url = payment_url
         booking._guest_portal_url = guest_portal_url
+        return booking
+
+    @action(detail=True, methods=["post", "get"], url_path="parties")
+    def parties(self, request, pk=None):
+        trip = self.get_object()
+        if not self._user_can_manage_trip(request.user, trip):
+            return Response({"detail": "Not permitted."}, status=status.HTTP_403_FORBIDDEN)
+
+        if request.method.lower() == "get":
+            bookings = (
+                trip.bookings.select_related("primary_guest")
+                .prefetch_related("booking_guests__guest", "payments")
+                .order_by("created_at")
+            )
+            serializer = TripPartySerializer(bookings, many=True)
+            return Response({"parties": serializer.data})
+
+        serializer = BookingCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            booking = self._create_party_instance(trip=trip, party_data=serializer.validated_data)
+        except ValueError:
+            return Response({"detail": "Trip capacity would be exceeded."}, status=status.HTTP_400_BAD_REQUEST)
+
         response_serializer = BookingResponseSerializer(booking)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["get"], url_path="service/(?P<service_id>[^/.]+)/guides")
+    def service_guides(self, request, service_id=None):
+        if not request.user.is_authenticated:
+            return Response({"detail": "Authentication credentials were not provided."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        permitted = request.user.is_superuser or ServiceMembership.objects.filter(
+            user=request.user,
+            guide_service_id=service_id,
+            role__in=[ServiceMembership.OWNER, ServiceMembership.MANAGER],
+            is_active=True,
+        ).exists()
+
+        if not permitted:
+            return Response({"detail": "Not permitted."}, status=status.HTTP_403_FORBIDDEN)
+
+        guides = User.objects.filter(
+            servicemembership__guide_service_id=service_id,
+            servicemembership__role=ServiceMembership.GUIDE,
+            servicemembership__is_active=True,
+        ).distinct()
+
+        serializer = GuideSummarySerializer(guides, many=True)
+        return Response(serializer.data)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        trip = serializer.save()
+        party_data = serializer.context.get("party_data")
+        guide = serializer.context.get("guide")
+
+        if party_data is None:
+            trip.delete()
+            return Response({"detail": "A party is required when creating a trip."}, status=status.HTTP_400_BAD_REQUEST)
+
+        party_serializer = BookingCreateSerializer(data=party_data)
+        party_serializer.is_valid(raise_exception=True)
+
+        try:
+            booking = self._create_party_instance(trip=trip, party_data=party_serializer.validated_data)
+        except ValueError:
+            trip.delete()
+            return Response({"detail": "Trip capacity would be exceeded."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if guide:
+            Assignment.objects.update_or_create(
+                trip=trip,
+                guide=guide,
+                defaults={"role": Assignment.LEAD},
+            )
+
+        if not trip.title.strip():
+            primary_guest = booking.primary_guest
+            fallback_title = primary_guest.full_name or primary_guest.email or "Private Trip"
+            Trip.objects.filter(pk=trip.pk).update(title=fallback_title)
+
+        trip.refresh_from_db()
+        output = TripSerializer(trip, context=self.get_serializer_context())
+        headers = self.get_success_headers(output.data)
+        return Response(output.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    @action(detail=True, methods=["post"], url_path="assign-guide")
+    def assign_guide(self, request, pk=None):
+        trip = self.get_object()
+        if not self._user_can_manage_trip(request.user, trip):
+            return Response({"detail": "Not permitted."}, status=status.HTTP_403_FORBIDDEN)
+
+        guide_id = request.data.get("guide_id", None)
+        if guide_id in ("", None):
+            Assignment.objects.filter(trip=trip).delete()
+        else:
+            try:
+                guide = User.objects.get(pk=guide_id)
+            except User.DoesNotExist:
+                return Response({"detail": "Guide not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            is_active = ServiceMembership.objects.filter(
+                user=guide,
+                guide_service=trip.guide_service,
+                role=ServiceMembership.GUIDE,
+                is_active=True,
+            ).exists()
+            if not is_active:
+                return Response({"detail": "Guide is not active for this service."}, status=status.HTTP_400_BAD_REQUEST)
+
+            Assignment.objects.filter(trip=trip).delete()
+            Assignment.objects.create(trip=trip, guide=guide, role=Assignment.LEAD)
+
+        trip.refresh_from_db()
+        serializer = TripSerializer(trip, context=self.get_serializer_context())
+        return Response(serializer.data, status=status.HTTP_200_OK)

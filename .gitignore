@@ -4,6 +4,7 @@ frontend/.pnpm-store/
 .pnpm-store/
 frontend/dist/
 frontend/test-results/
+frontend/coverage/
 
 # IDE project files
 .idea/

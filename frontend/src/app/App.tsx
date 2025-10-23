@@ -7,6 +7,7 @@ import GuideAvailabilityCalendar from '../features/availability/GuideAvailabilit
 import { useAuth } from '../lib/auth'
 import GuestsDirectoryPage from '../features/staff/GuestsDirectoryPage'
 import { fetchMemberships } from '../features/profile/api'
+import CheckoutPreviewPage from '../features/payments/CheckoutPreviewPage'
 
 export default function App(){
   const { isAuthenticated, user, logout } = useAuth()
@@ -15,6 +16,25 @@ export default function App(){
     queryFn: fetchMemberships,
     enabled: isAuthenticated
   })
+  const serviceLabel = (() => {
+    if (!memberships || memberships.length === 0) return null
+    const activeMemberships = memberships.filter(m => m.is_active)
+    if (activeMemberships.length === 0) return null
+    const ownerService = activeMemberships.find(m => ['OWNER', 'OFFICE_MANAGER', 'GUEST'].includes(m.role))
+    if (ownerService) {
+      const uniqueServices = new Set(activeMemberships.filter(m => ['OWNER', 'OFFICE_MANAGER', 'GUEST'].includes(m.role)).map(m => m.guide_service_name))
+      if (uniqueServices.size === 1) {
+        return uniqueServices.values().next().value as string
+      }
+      return 'Multiple services'
+    }
+    const uniqueServices = new Set(activeMemberships.map(m => m.guide_service_name))
+    if (uniqueServices.size === 1) {
+      return uniqueServices.values().next().value as string
+    }
+    return 'Multiple services'
+  })()
+
   const canManageGuests = memberships?.some(m => [
     'OWNER',
     'OFFICE_MANAGER'
@@ -33,7 +53,10 @@ export default function App(){
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
       <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Anchorpoint</h1>
+        <div>
+          <h1 className="text-2xl font-bold">Anchorpoint</h1>
+          {serviceLabel && <p className="text-xs text-gray-500 mt-1">{serviceLabel}</p>}
+        </div>
         <nav className="space-x-4 flex items-center gap-3">
           <Link to="/" className="underline">Trips</Link>
           <Link to="/calendar" className="underline">Calendar</Link>
@@ -47,6 +70,7 @@ export default function App(){
         <Route path="/" element={<TripsList/>} />
         <Route path="/calendar" element={<GuideAvailabilityCalendar/>} />
         <Route path="/profile" element={<ProfilePage/>} />
+        <Route path="/payments/preview" element={<CheckoutPreviewPage />} />
         {canManageGuests && <Route path="/guests" element={<GuestsDirectoryPage/>} />}
       </Routes>
     </div>

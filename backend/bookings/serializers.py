@@ -4,6 +4,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from bookings.models import Booking, BookingGuest, GuestProfile
+from bookings.services.payments import get_latest_payment_preview_url
 
 
 class BookingSummarySerializer(serializers.ModelSerializer):
@@ -28,7 +29,7 @@ class BookingSummarySerializer(serializers.ModelSerializer):
 
 class GuestProfileSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(read_only=True)
-    bookings = BookingSummarySerializer(many=True, read_only=True)
+    parties = BookingSummarySerializer(many=True, read_only=True, source="bookings")
 
     class Meta:
         model = GuestProfile
@@ -40,12 +41,12 @@ class GuestProfileSerializer(serializers.ModelSerializer):
             "full_name",
             "phone",
             "updated_at",
-            "bookings",
+            "parties",
         ]
 
 
 class GuestProfileDetailSerializer(serializers.ModelSerializer):
-    bookings = BookingSummarySerializer(many=True, read_only=True)
+    parties = BookingSummarySerializer(many=True, read_only=True, source="bookings")
     full_name = serializers.CharField(read_only=True)
 
     class Meta:
@@ -62,7 +63,7 @@ class GuestProfileDetailSerializer(serializers.ModelSerializer):
             "emergency_contact_phone",
             "medical_notes",
             "dietary_notes",
-            "bookings",
+            "parties",
             "created_at",
             "updated_at",
         ]
@@ -156,3 +157,45 @@ class BookingResponseSerializer(serializers.ModelSerializer):
 
     def get_guest_portal_url(self, obj):
         return getattr(obj, "_guest_portal_url", None)
+
+
+class TripPartySerializer(serializers.ModelSerializer):
+    primary_guest_name = serializers.CharField(source="primary_guest.full_name", read_only=True)
+    primary_guest_email = serializers.EmailField(source="primary_guest.email", read_only=True)
+    payment_preview_url = serializers.SerializerMethodField()
+    guests = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Booking
+        fields = [
+            "id",
+            "trip_id",
+            "primary_guest_name",
+            "primary_guest_email",
+            "party_size",
+            "payment_status",
+            "info_status",
+            "waiver_status",
+            "created_at",
+            "payment_preview_url",
+            "guests",
+        ]
+        read_only_fields = fields
+
+    def get_payment_preview_url(self, obj: Booking):
+        return get_latest_payment_preview_url(obj)
+
+    def get_guests(self, obj: Booking):
+        guests = (
+            obj.booking_guests.select_related("guest")
+            .all()
+        )
+        return [
+            {
+                "id": guest.guest_id,
+                "full_name": guest.guest.full_name,
+                "email": guest.guest.email,
+                "is_primary": guest.is_primary,
+            }
+            for guest in guests
+        ]

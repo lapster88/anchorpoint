@@ -55,8 +55,8 @@ export default function GuestTokenPage(){
   }, [token])
 
   const tripSummary = useMemo(() => {
-    if (!data?.bookings?.length) return null
-    return data.bookings[0]
+    if (!data?.parties?.length) return null
+    return data.parties[0]
   }, [data])
 
   const handleChange = (field: keyof UpdateGuestProfilePayload) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {

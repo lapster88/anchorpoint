@@ -8,7 +8,7 @@ export type GuestProfile = {
   full_name: string | null
   phone: string | null
   updated_at: string
-  bookings: Array<{
+  parties: Array<{
     id: number
     trip_title: string
     trip_start: string
@@ -31,7 +31,7 @@ export async function requestGuestLink(payload: { guest_id: number; booking_id?:
   await api.post('/api/guest-links/', payload)
 }
 
-export type CreateBookingPayload = {
+export type CreatePartyPayload = {
   primary_guest: {
     email: string
     first_name?: string
@@ -43,11 +43,11 @@ export type CreateBookingPayload = {
     medical_notes?: string
     dietary_notes?: string
   }
-  additional_guests?: Array<CreateBookingPayload['primary_guest']>
+  additional_guests?: Array<CreatePartyPayload['primary_guest']>
   party_size?: number
 }
 
-export type CreateBookingResponse = {
+export type CreatePartyResponse = {
   id: number
   trip: number
   party_size: number
@@ -58,7 +58,33 @@ export type CreateBookingResponse = {
   guest_portal_url: string | null
 }
 
-export async function createBooking(tripId: number, payload: CreateBookingPayload): Promise<CreateBookingResponse> {
-  const { data } = await api.post<CreateBookingResponse>(`/api/trips/${tripId}/bookings/`, payload)
+export async function createParty(tripId: number, payload: CreatePartyPayload): Promise<CreatePartyResponse> {
+  const { data } = await api.post<CreatePartyResponse>(`/api/trips/${tripId}/parties/`, payload)
   return data
+}
+
+export type TripPartyGuest = {
+  id: number
+  full_name: string | null
+  email: string
+  is_primary: boolean
+}
+
+export type TripPartySummary = {
+  id: number
+  trip_id: number
+  primary_guest_name: string | null
+  primary_guest_email: string | null
+  party_size: number
+  payment_status: string
+  info_status: string
+  waiver_status: string
+  created_at: string
+  payment_preview_url: string | null
+  guests: TripPartyGuest[]
+}
+
+export async function listTripParties(tripId: number): Promise<TripPartySummary[]> {
+  const { data } = await api.get<{ parties: TripPartySummary[] }>(`/api/trips/${tripId}/parties/`)
+  return data.parties
 }

@@ -24,7 +24,11 @@ test.describe('Guide availability management', () => {
     await textInputs.nth(0).fill('Test')
     await textInputs.nth(1).fill('Guide')
     await textInputs.nth(2).fill('Test Guide')
+    const registerResponse = page.waitForResponse(resp =>
+      resp.url().includes('/api/auth/register/') && resp.status() === 201
+    )
     await page.getByRole('button', { name: 'Create Account' }).click()
+    await registerResponse
 
     await page.getByRole('link', { name: 'Profile' }).waitFor()
     await page.getByRole('link', { name: 'Profile' }).click()
@@ -34,7 +38,11 @@ test.describe('Guide availability management', () => {
     start.setMinutes(0, 0, 0)
     const end = new Date(start.getTime() + 2 * 60 * 60 * 1000)
 
-    const [startInput, endInput] = await page.locator('input[type="datetime-local"]').all()
+    const datetimeInputs = page.locator('input[type="datetime-local"]')
+    const startInput = datetimeInputs.nth(0)
+    const endInput = datetimeInputs.nth(1)
+    await startInput.waitFor()
+    await endInput.waitFor()
     await startInput.fill(toLocalDateTimeInput(start))
     await endInput.fill(toLocalDateTimeInput(end))
     await page.locator('input[placeholder="Optional context"]').fill('Prep climb')

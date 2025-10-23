@@ -1,22 +1,31 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { fetchMemberships, ServiceMembership } from '../profile/api'
-import CreateBookingForm from '../staff/CreateBookingForm'
+import TripPartyManager from '../staff/TripPartyManager'
+import CreateTripForm from './CreateTripForm'
+import TripGuideDetails from './TripGuideDetails'
+import { TripAssignment, TripDetail } from './api'
 
-type Trip = {
+export type Trip = {
   id: number
   title: string
   location: string
   start: string
   end: string
   price_cents: number
+  guide_service: number
+  guide_service_name: string
+  assignments: TripAssignment[]
+  requires_assignment: boolean
 }
 
 export default function TripsList(){
   const { isAuthenticated } = useAuth()
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null)
+  const [guideTrip, setGuideTrip] = useState<Trip | null>(null)
+  const [creatingTrip, setCreatingTrip] = useState(false)
   const { data, isLoading, error } = useQuery({
     queryKey: ['trips'],
     queryFn: async () => (await api.get('/api/trips/')).data,
@@ -28,30 +37,126 @@ export default function TripsList(){
     queryFn: fetchMemberships,
     enabled: isAuthenticated
   })
+  const activeMemberships = useMemo(
+    () => (memberships ?? []).filter((membership) => membership.is_active),
+    [memberships]
+  )
+  const managedMembership = useMemo(
+    () => activeMemberships.find((m) => ['OWNER', 'OFFICE_MANAGER', 'GUEST'].includes(m.role)),
+    [activeMemberships]
+  )
+  const uniqueServiceIds = useMemo(() => new Set(activeMemberships.map((m) => m.guide_service)), [activeMemberships])
+  const activeServiceId = managedMembership?.guide_service ?? (activeMemberships.length === 1 ? activeMemberships[0].guide_service : null)
+  const activeServiceName = managedMembership?.guide_service_name ?? (activeServiceId ? activeMemberships.find((m) => m.guide_service === activeServiceId)?.guide_service_name : undefined)
+  const showServiceLabel = useMemo(() => {
+    const hasGuideRole = activeMemberships.some((m) => m.role === 'GUIDE')
+    return hasGuideRole && uniqueServiceIds.size > 1
+  }, [activeMemberships, uniqueServiceIds])
+
+  const canManageBookings = useMemo(() => {
+    return memberships?.some((m: ServiceMembership) => ['OWNER', 'OFFICE_MANAGER'].includes(m.role)) ?? false
+  }, [memberships])
+
+  const isGuide = useMemo(() => activeMemberships.some((m) => m.role === 'GUIDE'), [activeMemberships])
+
+  const results: Trip[] = (data?.results || data || []) as Trip[]
+  const tripsWithDefaults = useMemo(
+    () =>
+      (results ?? []).map((trip) => ({
+        ...trip,
+        assignments: trip.assignments ?? [],
+        requires_assignment:
+          trip.requires_assignment ?? (trip.assignments && trip.assignments.length > 0 ? false : true),
+      })),
+    [results]
+  )
+
+  const handleTripUpdate = useCallback((detail: TripDetail) => {
+    setSelectedTrip((prev) => {
+      if (!prev || prev.id !== detail.id) return prev
+      return {
+        ...prev,
+        title: detail.title,
+        location: detail.location,
+        start: detail.start,
+        end: detail.end,
+        price_cents: detail.price_cents,
+        guide_service: detail.guide_service,
+        guide_service_name: detail.guide_service_name,
+        assignments: detail.assignments,
+        requires_assignment: detail.requires_assignment,
+      }
+    })
+  }, [])
 
   if (!isAuthenticated) return null
   if (isLoading) return <div>Loading…</div>
   if (error) return <div className="text-red-600">Failed to load trips</div>
 
-  const results: Trip[] = data?.results || data
-  const canManageBookings = useMemo(() => {
-    return memberships?.some((m: ServiceMembership) => ['OWNER', 'OFFICE_MANAGER'].includes(m.role)) ?? false
-  }, [memberships])
-
   return (
     <div className="space-y-6">
+      {canManageBookings && (
+        <div className="flex justify-between items-center">
+          <h2 className="text-lg font-semibold">Trips</h2>
+          <button
+            type="button"
+            className="bg-blue-600 text-white text-sm px-4 py-2 rounded disabled:opacity-50"
+            onClick={() => setCreatingTrip(true)}
+            disabled={!activeServiceId}
+          >
+            Create trip
+          </button>
+        </div>
+      )}
+      {creatingTrip && canManageBookings && (
+        <CreateTripForm
+          serviceId={activeServiceId ?? null}
+          serviceName={activeServiceName}
+          onClose={() => setCreatingTrip(false)}
+          onCreated={(tripDetail) => {
+            setCreatingTrip(false)
+            setSelectedTrip({
+              id: tripDetail.id,
+              title: tripDetail.title,
+              location: tripDetail.location,
+              start: tripDetail.start,
+              end: tripDetail.end,
+              price_cents: tripDetail.price_cents,
+              guide_service: tripDetail.guide_service,
+              guide_service_name: tripDetail.guide_service_name,
+              assignments: tripDetail.assignments,
+              requires_assignment: tripDetail.requires_assignment
+            })
+          }}
+        />
+      )}
       <div className="grid gap-4 md:grid-cols-2">
-        {results?.map((t: Trip) => (
+        {tripsWithDefaults?.map((t: Trip) => (
           <div key={t.id} className="card space-y-2">
             <h3 className="text-xl font-semibold">{t.title}</h3>
             <p>{t.location} · {new Date(t.start).toLocaleDateString()}</p>
+            {showServiceLabel && (
+              <p className="text-xs text-gray-500">{t.guide_service_name}</p>
+            )}
+            {canManageBookings && t.requires_assignment && (
+              <span className="inline-flex items-center text-xs font-medium bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Needs guide assignment</span>
+            )}
             {canManageBookings && (
               <button
                 type="button"
                 className="text-sm text-blue-600 underline"
                 onClick={() => setSelectedTrip(t)}
               >
-                Create booking
+                Manage trip
+              </button>
+            )}
+            {isGuide && (
+              <button
+                type="button"
+                className="text-sm text-blue-600 underline"
+                onClick={() => setGuideTrip(t)}
+              >
+                View details
               </button>
             )}
           </div>
@@ -59,16 +164,27 @@ export default function TripsList(){
         {!results?.length && <div>No trips yet.</div>}
       </div>
       {selectedTrip && canManageBookings && (
-        <CreateBookingForm
+        <TripPartyManager
           trip={{
             id: selectedTrip.id,
             title: selectedTrip.title,
+            location: selectedTrip.location,
             start: selectedTrip.start,
             end: selectedTrip.end,
-            price_cents: selectedTrip.price_cents
+            price_cents: selectedTrip.price_cents,
+            guide_service: selectedTrip.guide_service,
+            guide_service_name: selectedTrip.guide_service_name,
+            assignments: selectedTrip.assignments,
+            requires_assignment: selectedTrip.requires_assignment
           }}
           onClose={() => setSelectedTrip(null)}
+          canEditAssignments={canManageBookings}
+          serviceId={selectedTrip.guide_service}
+          onTripUpdate={handleTripUpdate}
         />
+      )}
+      {guideTrip && (
+        <TripGuideDetails trip={guideTrip} onClose={() => setGuideTrip(null)} />
       )}
     </div>
   )
