@@ -98,23 +98,18 @@ def test_guide_only_sees_assigned_trips(guide_service_a, guide_service_b):
 
 
 @pytest.mark.django_db
-def test_guest_sees_no_trips(guide_service_a):
-    guest = User.objects.create_user(
+def test_user_without_memberships_sees_no_trips(guide_service_a):
+    user = User.objects.create_user(
         username="guest@example.com",
         email="guest@example.com",
         password="password123",
         first_name="Greta",
         last_name="Guest",
     )
-    ServiceMembership.objects.create(
-        user=guest,
-        guide_service=guide_service_a,
-        role=ServiceMembership.GUEST,
-    )
     _create_trip(guide_service_a, "Trip 1")
 
     client = APIClient()
-    client.force_authenticate(user=guest)
+    client.force_authenticate(user=user)
     response = client.get("/api/trips/")
     assert response.status_code == 200
     assert response.data == []

@@ -44,7 +44,7 @@ class TripViewSet(viewsets.ModelViewSet):
         if memberships.filter(role=ServiceMembership.GUIDE).exists():
             return base_queryset.filter(assignments__guide=user).distinct()
 
-        # Guests or other roles do not see trips by default.
+        # Other roles do not see trips by default.
         return base_queryset.none()
 
     def _user_can_manage_trip(self, user, trip: Trip) -> bool:

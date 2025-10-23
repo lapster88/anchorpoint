@@ -10,12 +10,10 @@ class ServiceMembership(models.Model):
     OWNER = "OWNER"
     MANAGER = "OFFICE_MANAGER"
     GUIDE = "GUIDE"
-    GUEST = "GUEST"
     ROLES = [
         (OWNER, "Owner"),
         (MANAGER, "Office Manager"),
         (GUIDE, "Guide"),
-        (GUEST, "Guest"),
     ]
 
     user = models.ForeignKey("User", on_delete=models.CASCADE)

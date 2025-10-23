@@ -90,7 +90,7 @@ Represents a guiding business (multi-tenant anchor).
 
 ### User & ServiceMembership
 Users can belong to multiple guide services with different roles.
-- Roles: `OWNER`, `OFFICE_MANAGER`, `GUIDE`, `GUEST`
+- Roles: `OWNER`, `OFFICE_MANAGER`, `GUIDE`
 - `ServiceMembership` keys: `(user, guide_service, role)` unique
 
 ### Trip
