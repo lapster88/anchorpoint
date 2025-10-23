@@ -155,8 +155,19 @@ class ServiceMembershipSerializer(serializers.ModelSerializer):
     """Expose the current user's service memberships."""
 
     guide_service_name = serializers.CharField(source="guide_service.name", read_only=True)
+    guide_service_logo_url = serializers.SerializerMethodField()
 
     class Meta:
         model = ServiceMembership
-        fields = ["id", "guide_service", "guide_service_name", "role", "is_active"]
-        read_only_fields = ["id", "guide_service_name", "role"]
+        fields = ["id", "guide_service", "guide_service_name", "guide_service_logo_url", "role", "is_active"]
+        read_only_fields = ["id", "guide_service_name", "guide_service_logo_url", "role"]
+
+    def get_guide_service_logo_url(self, obj) -> str | None:
+        logo = getattr(obj.guide_service, "logo", None)
+        if not logo:
+            return None
+        request = self.context.get("request")
+        url = logo.url
+        if request is not None:
+            return request.build_absolute_uri(url)
+        return url

@@ -45,3 +45,24 @@ class StripeAccountStatusSerializer(serializers.Serializer):
             "last_webhook_error_at": account.last_webhook_error_at,
             "last_webhook_error_message": account.last_webhook_error_message or "",
         }
+
+
+class GuideServiceSerializer(serializers.ModelSerializer):
+    """Expose branding and metadata for a guide service."""
+
+    logo_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = GuideService
+        fields = ["id", "name", "slug", "contact_email", "phone", "logo_url"]
+        read_only_fields = fields
+
+    def get_logo_url(self, obj: GuideService) -> str | None:
+        logo = getattr(obj, "logo", None)
+        if not logo:
+            return None
+        request = self.context.get("request")
+        url = logo.url
+        if request is not None:
+            return request.build_absolute_uri(url)
+        return url

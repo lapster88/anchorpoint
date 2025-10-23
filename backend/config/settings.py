@@ -18,6 +18,11 @@ INSTALLED_APPS = [
     'core','accounts','availability','orgs','trips','bookings','payments','waivers','reports',
 ]
 
+USE_S3_MEDIA = env.bool("USE_S3_MEDIA", default=False)
+
+if USE_S3_MEDIA:
+    INSTALLED_APPS.append('storages')
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -90,6 +95,10 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[])
 
 STATIC_URL = 'static/'
+MEDIA_ROOT = Path(env("MEDIA_ROOT", default=BASE_DIR.parent / 'media'))
+MEDIA_URL = env("MEDIA_URL", default="/media/")
+if not MEDIA_URL.endswith('/'):
+    MEDIA_URL = f"{MEDIA_URL}/"
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY", default="")
@@ -103,3 +112,19 @@ STRIPE_USE_STUB = env.bool('STRIPE_USE_STUB', default=True)
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
 EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Anchorpoint <notifications@anchorpoint.app>')
+
+if USE_S3_MEDIA:
+    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+    AWS_STORAGE_BUCKET_NAME = env('AWS_STORAGE_BUCKET_NAME')
+    AWS_S3_REGION_NAME = env('AWS_S3_REGION_NAME', default=None)
+    AWS_S3_CUSTOM_DOMAIN = env('AWS_S3_CUSTOM_DOMAIN', default=None)
+    AWS_S3_OBJECT_PARAMETERS = {'CacheControl': 'max-age=86400'}
+    AWS_S3_FILE_OVERWRITE = False
+    AWS_DEFAULT_ACL = None
+    AWS_QUERYSTRING_AUTH = env.bool('AWS_QUERYSTRING_AUTH', default=False)
+    if AWS_S3_CUSTOM_DOMAIN:
+        MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN.rstrip('/')}/"
+    elif AWS_S3_REGION_NAME:
+        MEDIA_URL = f"https://{AWS_STORAGE_BUCKET_NAME}.s3.{AWS_S3_REGION_NAME}.amazonaws.com/"
+    else:
+        MEDIA_URL = f"https://{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com/"

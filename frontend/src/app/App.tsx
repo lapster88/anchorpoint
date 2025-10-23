@@ -4,6 +4,7 @@ import AuthPage from '../features/auth/AuthPage'
 import TripsList from '../features/trips/TripsList'
 import ProfilePage from '../features/profile/ProfilePage'
 import GuideAvailabilityCalendar from '../features/availability/GuideAvailabilityCalendar'
+import ServiceSettingsPage from '../features/service/ServiceSettingsPage'
 import { useAuth } from '../lib/auth'
 import GuestsDirectoryPage from '../features/staff/GuestsDirectoryPage'
 import { fetchMemberships } from '../features/profile/api'
@@ -35,10 +36,10 @@ export default function App(){
     return 'Multiple services'
   })()
 
-  const canManageGuests = memberships?.some(m => [
-    'OWNER',
-    'OFFICE_MANAGER'
-  ].includes(m.role)) ?? false
+  const canManageGuests = memberships?.some(m => (
+    m.is_active && ['OWNER', 'OFFICE_MANAGER'].includes(m.role)
+  )) ?? false
+  const canManageService = canManageGuests
   // Ask for confirmation before wiping local auth state.
   const handleLogout = () => {
     if (window.confirm('Sign out of Anchorpoint?')) {
@@ -60,6 +61,7 @@ export default function App(){
         <nav className="space-x-4 flex items-center gap-3">
           <Link to="/" className="underline">Trips</Link>
           <Link to="/calendar" className="underline">Calendar</Link>
+          {canManageService && <Link to="/service-settings" className="underline">Service Settings</Link>}
           <Link to="/profile" className="underline">Profile</Link>
           {canManageGuests && <Link to="/guests" className="underline">Guests</Link>}
           <span className="text-sm text-gray-600">Signed in as {user?.display_name || user?.email}</span>
@@ -69,6 +71,7 @@ export default function App(){
       <Routes>
         <Route path="/" element={<TripsList/>} />
         <Route path="/calendar" element={<GuideAvailabilityCalendar/>} />
+        {canManageService && <Route path="/service-settings" element={<ServiceSettingsPage/>} />}
         <Route path="/profile" element={<ProfilePage/>} />
         <Route path="/payments/preview" element={<CheckoutPreviewPage />} />
         {canManageGuests && <Route path="/guests" element={<GuestsDirectoryPage/>} />}

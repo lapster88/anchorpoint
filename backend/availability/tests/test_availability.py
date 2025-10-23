@@ -281,3 +281,4 @@ def test_memberships_endpoint(api_client, guide, guide_service_a):
     response = api_client.get("/api/auth/memberships/")
     assert response.status_code == 200
     assert response.data[0]["guide_service"] == guide_service_a.id
+    assert response.data[0]["guide_service_logo_url"] is None

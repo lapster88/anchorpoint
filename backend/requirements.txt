@@ -7,7 +7,7 @@ djangorestframework
 djangorestframework-simplejwt
 django-filter
 django-environ
+django-storages[boto3]
 pytest
 pytest-django
-stripe
 stripe

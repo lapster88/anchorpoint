@@ -1,10 +1,12 @@
 import logging
+import mimetypes
 from datetime import datetime, timezone
 
 import stripe
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from rest_framework import status
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -12,6 +14,7 @@ from rest_framework.views import APIView
 from .models import GuideService, ServiceStripeAccount
 from .permissions import IsServiceOwnerOrManager
 from .serializers import (
+    GuideServiceSerializer,
     StripeAccountStatusSerializer,
     StripeOnboardingLinkSerializer,
 )
@@ -56,7 +59,7 @@ def sync_account_from_stripe(
         local_account.save(update_fields=changed_fields)
 
 
-class GuideServiceStripeBaseView(APIView):
+class GuideServiceBaseView(APIView):
     permission_classes = [IsAuthenticated, IsServiceOwnerOrManager]
     guide_service: GuideService | None = None
 
@@ -65,6 +68,8 @@ class GuideServiceStripeBaseView(APIView):
         self.guide_service = get_object_or_404(GuideService, pk=service_id)
         return super().dispatch(request, *args, **kwargs)
 
+
+class GuideServiceStripeBaseView(GuideServiceBaseView):
     def get_account(self) -> ServiceStripeAccount | None:
         try:
             return self.guide_service.stripe_account  # type: ignore[attr-defined]
@@ -288,3 +293,58 @@ class StripeWebhookView(APIView):
                 )
 
         return Response(status=status.HTTP_200_OK)
+
+
+class GuideServiceDetailView(GuideServiceBaseView):
+    """Return branding/settings information for a guide service."""
+
+    def get(self, request, service_id, *args, **kwargs):
+        serializer = GuideServiceSerializer(
+            self.guide_service, context={"request": request}
+        )
+        return Response(serializer.data)
+
+
+class GuideServiceLogoView(GuideServiceBaseView):
+    """Upload or delete a guide service logo."""
+
+    parser_classes = [MultiPartParser, FormParser]
+    MAX_FILE_BYTES = 2 * 1024 * 1024  # 2 MB
+    ALLOWED_CONTENT_TYPES = {"image/png", "image/jpeg", "image/svg+xml"}
+
+    def post(self, request, service_id, *args, **kwargs):
+        logo_file = request.FILES.get("logo")
+        if logo_file is None:
+            return Response({"detail": "logo file is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if logo_file.size > self.MAX_FILE_BYTES:
+            return Response(
+                {"detail": "Logo must be 2 MB or smaller."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        content_type = logo_file.content_type or mimetypes.guess_type(logo_file.name)[0]
+        if content_type not in self.ALLOWED_CONTENT_TYPES:
+            return Response(
+                {"detail": "Unsupported file type. Upload PNG, JPEG, or SVG."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        existing_logo = getattr(self.guide_service, "logo", None)
+        if existing_logo:
+            existing_logo.delete(save=False)
+
+        self.guide_service.logo = logo_file
+        self.guide_service.save(update_fields=["logo"])
+
+        serializer = GuideServiceSerializer(
+            self.guide_service, context={"request": request}
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def delete(self, request, service_id, *args, **kwargs):
+        if self.guide_service.logo:
+            self.guide_service.logo.delete(save=False)
+            self.guide_service.logo = None
+            self.guide_service.save(update_fields=["logo"])
+        return Response(status=status.HTTP_204_NO_CONTENT)

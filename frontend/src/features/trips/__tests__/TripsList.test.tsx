@@ -54,7 +54,7 @@ const mockTrips = [
     guide_service: 2,
     guide_service_name: 'Desert Adventures',
     assignments: [
-      { id: 3, guide_id: 9, role: 'LEAD', guide_name: 'Guide Example' }
+      { id: 3, guide_id: 9, guide_name: 'Guide Example' }
     ],
     requires_assignment: false
   }
@@ -128,7 +128,7 @@ describe('TripsList', () => {
 
   it('shows manage trip button for owner/manager', async () => {
     membershipData = [
-      { id: 1, guide_service: 1, guide_service_name: 'Summit Guides', role: 'OWNER', is_active: true }
+      { id: 1, guide_service: 1, guide_service_name: 'Summit Guides', guide_service_logo_url: null, role: 'OWNER', is_active: true }
     ]
 
     renderTripsList()
@@ -142,7 +142,7 @@ describe('TripsList', () => {
 
   it('does not show manage trip button for guides', async () => {
     membershipData = [
-      { id: 1, guide_service: 1, guide_service_name: 'Summit Guides', role: 'GUIDE', is_active: true }
+      { id: 1, guide_service: 1, guide_service_name: 'Summit Guides', guide_service_logo_url: null, role: 'GUIDE', is_active: true }
     ]
 
     renderTripsList()
@@ -154,7 +154,7 @@ describe('TripsList', () => {
 
   it('opens trip manager when clicking manage trip', async () => {
     membershipData = [
-      { id: 1, guide_service: 1, guide_service_name: 'Summit Guides', role: 'OWNER', is_active: true }
+      { id: 1, guide_service: 1, guide_service_name: 'Summit Guides', guide_service_logo_url: null, role: 'OWNER', is_active: true }
     ]
 
     renderTripsList()
@@ -167,8 +167,8 @@ describe('TripsList', () => {
 
   it('shows service label for guides with multiple services', async () => {
     membershipData = [
-      { id: 1, guide_service: 1, guide_service_name: 'Summit Guides', role: 'GUIDE', is_active: true },
-      { id: 2, guide_service: 2, guide_service_name: 'Desert Adventures', role: 'GUIDE', is_active: true }
+      { id: 1, guide_service: 1, guide_service_name: 'Summit Guides', guide_service_logo_url: null, role: 'GUIDE', is_active: true },
+      { id: 2, guide_service: 2, guide_service_name: 'Desert Adventures', guide_service_logo_url: null, role: 'GUIDE', is_active: true }
     ]
 
     renderTripsList()
@@ -180,7 +180,7 @@ describe('TripsList', () => {
 
   it('displays assignment badge when a trip needs a guide', async () => {
     membershipData = [
-      { id: 1, guide_service: 1, guide_service_name: 'Summit Guides', role: 'OWNER', is_active: true }
+      { id: 1, guide_service: 1, guide_service_name: 'Summit Guides', guide_service_logo_url: null, role: 'OWNER', is_active: true }
     ]
 
     renderTripsList()
@@ -190,7 +190,7 @@ describe('TripsList', () => {
 
   it('allows guides to open a read-only detail view', async () => {
     membershipData = [
-      { id: 1, guide_service: 1, guide_service_name: 'Summit Guides', role: 'GUIDE', is_active: true }
+      { id: 1, guide_service: 1, guide_service_name: 'Summit Guides', guide_service_logo_url: null, role: 'GUIDE', is_active: true }
     ]
 
     renderTripsList()

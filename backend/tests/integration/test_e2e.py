@@ -74,6 +74,7 @@ def test_end_to_end_availability_flow():
     memberships_response = client.get("/api/auth/memberships/")
     assert memberships_response.status_code == 200
     assert memberships_response.data[0]["guide_service"] == service.id
+    assert memberships_response.data[0]["guide_service_logo_url"] is None
 
     # Clean up availability
     delete_response = client.delete(f"/api/auth/availabilities/{availability_id}/")

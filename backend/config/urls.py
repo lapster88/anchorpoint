@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
@@ -16,6 +18,8 @@ from availability.api import (
 )
 from bookings.api import GuestLinkRequestView, GuestProfileUpdateView, GuestProfileViewSet
 from orgs.api import (
+    GuideServiceDetailView,
+    GuideServiceLogoView,
     StripeAccountStatusView,
     StripeDisconnectView,
     StripeOnboardingLinkView,
@@ -75,5 +79,18 @@ urlpatterns = [
         StripeDisconnectView.as_view(),
         name="guide-service-stripe-disconnect",
     ),
+    path(
+        "api/orgs/<int:service_id>/logo/",
+        GuideServiceLogoView.as_view(),
+        name="guide-service-logo",
+    ),
+    path(
+        "api/orgs/<int:service_id>/",
+        GuideServiceDetailView.as_view(),
+        name="guide-service-detail",
+    ),
     path("api/webhooks/stripe/", StripeWebhookView.as_view(), name="stripe-webhook"),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

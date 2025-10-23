@@ -48,6 +48,12 @@ This document captures the implementation plan for the guide service management 
 - Files stored in S3; no image processing initially.
 - Reasonable size limits (e.g., <= 2 MB).
 
+### Implementation
+- Added optional `logo` `ImageField` on `GuideService` with `/api/orgs/<id>/logo/` endpoints secured to owners/managers.
+- Supports multipart uploads, file-type/size validation, and deletion. Local storage defaults to `MEDIA_ROOT`; `USE_S3_MEDIA=true` switches to S3 using `django-storages`.
+- `ServiceMembershipSerializer` exposes `guide_service_logo_url` so the frontend can show logos without extra calls.
+- Frontend settings page surfaces upload/remove controls and reflects updates immediately via React Query.
+
 ### Backend
 1. Configure `django-storages` (or existing storage layer) to upload to S3.
 2. Add fields to `GuideService`: `logo_url`, `logo_updated_at`.

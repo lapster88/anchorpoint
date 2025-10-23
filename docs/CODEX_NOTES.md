@@ -7,6 +7,7 @@
 - Backend management commands/tests should run inside the backend container: `docker compose --env-file .env -f infra/docker-compose.yml exec backend python manage.py …` / `pytest`.
 - Keep `.env` in sync with Docker expectations (Postgres credentials, JWT secrets) before running services.
 - Stripe Connect env vars: `STRIPE_SECRET_KEY`, `STRIPE_CONNECT_CLIENT_ID`, `STRIPE_CONNECT_RETURN_URL`, `STRIPE_CONNECT_REFRESH_URL`, `STRIPE_WEBHOOK_SECRET`.
+- Logo uploads: by default logos land under `MEDIA_ROOT`; set `USE_S3_MEDIA=true` along with `AWS_STORAGE_BUCKET_NAME`, `AWS_S3_REGION_NAME`, etc. to back uploads with S3.
 
 ## Backend Snapshot
 - Django 5 + DRF located in `backend/`; custom user model at `accounts`. JWT auth via `djangorestframework-simplejwt`.
