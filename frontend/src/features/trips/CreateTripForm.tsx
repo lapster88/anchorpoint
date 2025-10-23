@@ -25,7 +25,7 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
   const [capacity, setCapacity] = useState(1)
   const [description, setDescription] = useState('')
   const [guides, setGuides] = useState<GuideOption[]>([])
-  const [guideId, setGuideId] = useState<number | ''>('')
+  const [selectedGuideIds, setSelectedGuideIds] = useState<number[]>([])
 
   const [primary, setPrimary] = useState<GuestForm>(emptyGuest)
   const [additionalGuests, setAdditionalGuests] = useState<GuestForm[]>([])
@@ -104,7 +104,7 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
       capacity,
       price_cents: Math.round(priceNumber * 100),
       description: description.trim(),
-      guide: guideId === '' ? null : Number(guideId),
+      guides: selectedGuideIds,
       party: partyPayload,
     }
 
@@ -115,7 +115,7 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
     let active = true
     if (!serviceId) {
       setGuides([])
-      setGuideId('')
+      setSelectedGuideIds([])
       return () => {
         active = false
       }
@@ -125,20 +125,18 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
       .then(data => {
         if (!active) return
         setGuides(data)
-        if (!data.some(guide => guide.id === guideId)) {
-          setGuideId('')
-        }
+        setSelectedGuideIds(prev => prev.filter(id => data.some(guide => guide.id === id)))
       })
       .catch(() => {
         if (!active) return
         setGuides([])
-        setGuideId('')
+        setSelectedGuideIds([])
       })
 
     return () => {
       active = false
     }
-  }, [serviceId, guideId])
+  }, [serviceId])
 
   if (!serviceId) {
     return (
@@ -178,24 +176,33 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
         </div>
 
         <div className="space-y-1">
-          <label className="text-sm font-medium text-gray-700 block">
-            Assigned guide (optional)
-            <select
-              className="mt-1 w-full border rounded px-3 py-2 bg-white"
-              value={guideId}
-              onChange={(event) => setGuideId(event.target.value ? Number(event.target.value) : '')}
-              disabled={!serviceId}
-            >
-              <option value="">Unassigned</option>
-              {guides.map(guide => {
-                const name = guide.display_name || [guide.first_name, guide.last_name].filter(Boolean).join(' ').trim()
-                const label = name || guide.email
+          <div>
+            <p className="text-sm font-medium text-gray-700">Assigned guides (optional)</p>
+            <div className="mt-2 space-y-2">
+              {guides.map((guide) => {
+                const name = guide.display_name || [guide.first_name, guide.last_name].filter(Boolean).join(' ').trim() || guide.email
+                const isChecked = selectedGuideIds.includes(guide.id)
                 return (
-                  <option key={guide.id} value={guide.id}>{label}</option>
+                  <label key={guide.id} className="inline-flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={isChecked}
+                      onChange={(event) => {
+                        setSelectedGuideIds(prev =>
+                          event.target.checked
+                            ? [...prev, guide.id]
+                            : prev.filter(id => id !== guide.id)
+                        )
+                      }}
+                      disabled={!serviceId}
+                    />
+                    <span>{name}</span>
+                  </label>
                 )
               })}
-            </select>
-          </label>
+            </div>
+          </div>
           {serviceId && !guides.length && (
             <p className="text-xs text-gray-500">No active guides are assigned to this service yet.</p>
           )}

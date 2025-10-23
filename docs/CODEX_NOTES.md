@@ -6,6 +6,7 @@
 - Frontend uses `pnpm` via the container runtime. Run install/build commands as `docker compose --env-file .env -f infra/docker-compose.yml exec frontend pnpm …`.
 - Backend management commands/tests should run inside the backend container: `docker compose --env-file .env -f infra/docker-compose.yml exec backend python manage.py …` / `pytest`.
 - Keep `.env` in sync with Docker expectations (Postgres credentials, JWT secrets) before running services.
+- Stripe Connect env vars: `STRIPE_SECRET_KEY`, `STRIPE_CONNECT_CLIENT_ID`, `STRIPE_CONNECT_RETURN_URL`, `STRIPE_CONNECT_REFRESH_URL`, `STRIPE_WEBHOOK_SECRET`.
 
 ## Backend Snapshot
 - Django 5 + DRF located in `backend/`; custom user model at `accounts`. JWT auth via `djangorestframework-simplejwt`.

@@ -90,7 +90,8 @@ describe('CreateTripForm', () => {
 
     await waitFor(() => expect(listServiceGuides).toHaveBeenCalledWith(1))
 
-    await userEvent.selectOptions(screen.getByLabelText(/Assigned guide/), '10')
+    const guideCheckbox = await screen.findByLabelText('Gabe Guide')
+    await userEvent.click(guideCheckbox)
     await userEvent.type(screen.getByLabelText('Location'), 'Mt. Baker')
     await userEvent.type(screen.getByLabelText('Start'), '2025-10-20T08:00')
     await userEvent.type(screen.getByLabelText('End'), '2025-10-20T16:00')
@@ -111,7 +112,7 @@ describe('CreateTripForm', () => {
 
     expect(payload.title).toBe('Greta Guest')
     expect(payload.guide_service).toBe(1)
-    expect(payload.guide).toBe(10)
+    expect(payload.guides).toEqual([10])
     expect(payload.location).toBe('Mt. Baker')
     expect(payload.price_cents).toBe(15000)
     expect(payload.party.primary_guest.email).toBe('guest@example.com')

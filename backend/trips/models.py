@@ -26,8 +26,10 @@ class Trip(models.Model):
         return super().save(*args, **kwargs)
 
 class Assignment(models.Model):
-    LEAD='LEAD'; ASSIST='ASSIST'
-    ROLES=[(LEAD,'Lead'),(ASSIST,'Assistant')]
-    trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name='assignments')
+    trip = models.ForeignKey(
+        Trip, on_delete=models.CASCADE, related_name="assignments"
+    )
     guide = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    role = models.CharField(max_length=10, choices=ROLES)
+
+    def __str__(self):
+        return f"{self.trip.title} → {self.guide.get_full_name() or self.guide.email}"

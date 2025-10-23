@@ -15,6 +15,12 @@ from availability.api import (
     GuideCalendarIntegrationViewSet,
 )
 from bookings.api import GuestLinkRequestView, GuestProfileUpdateView, GuestProfileViewSet
+from orgs.api import (
+    StripeAccountStatusView,
+    StripeDisconnectView,
+    StripeOnboardingLinkView,
+    StripeWebhookView,
+)
 from trips.api import TripViewSet
 
 router = DefaultRouter()
@@ -54,4 +60,20 @@ urlpatterns = [
         name="guest-access-profile",
     ),
     path("api/", include(router.urls)),
+    path(
+        "api/orgs/<int:service_id>/stripe/link/",
+        StripeOnboardingLinkView.as_view(),
+        name="guide-service-stripe-link",
+    ),
+    path(
+        "api/orgs/<int:service_id>/stripe/status/",
+        StripeAccountStatusView.as_view(),
+        name="guide-service-stripe-status",
+    ),
+    path(
+        "api/orgs/<int:service_id>/stripe/disconnect/",
+        StripeDisconnectView.as_view(),
+        name="guide-service-stripe-disconnect",
+    ),
+    path("api/webhooks/stripe/", StripeWebhookView.as_view(), name="stripe-webhook"),
 ]

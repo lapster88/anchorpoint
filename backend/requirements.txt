@@ -10,3 +10,4 @@ django-environ
 pytest
 pytest-django
 stripe
+stripe

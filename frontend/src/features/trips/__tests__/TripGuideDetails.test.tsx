@@ -61,7 +61,7 @@ describe('TripGuideDetails', () => {
         }
       ],
       assignments: [
-        { id: 10, guide_id: 99, role: 'LEAD', guide_name: 'Gabe Guide' }
+        { id: 10, guide_id: 99, guide_name: 'Gabe Guide' }
       ],
       requires_assignment: false,
     })

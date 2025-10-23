@@ -36,7 +36,6 @@ class TripSerializer(serializers.ModelSerializer):
             {
                 "id": assignment.id,
                 "guide_id": assignment.guide_id,
-                "role": assignment.role,
                 "guide_name": assignment.guide.display_name
                 or f"{assignment.guide.first_name} {assignment.guide.last_name}".strip()
                 or assignment.guide.email,
@@ -50,31 +49,49 @@ class TripSerializer(serializers.ModelSerializer):
 
 class TripCreateSerializer(TripSerializer):
     party = BookingCreateSerializer(write_only=True)
-    guide = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=False, allow_null=True)
+    guides = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(), many=True, required=False, allow_empty=True
+    )
 
     class Meta(TripSerializer.Meta):
-        fields = TripSerializer.Meta.fields + ["party", "guide"]
+        fields = TripSerializer.Meta.fields + ["party", "guides"]
 
     def create(self, validated_data):
         party_data = validated_data.pop("party")
-        guide = validated_data.pop("guide", None)
+        guides = validated_data.pop("guides", [])
         trip = super().create(validated_data)
         self.context["party_data"] = party_data
-        self.context["guide"] = guide
+        # Preserve unique guides in insertion order for the view to apply afterwards.
+        seen = set()
+        ordered_guides = []
+        for guide in guides:
+            if guide.id not in seen:
+                ordered_guides.append(guide)
+                seen.add(guide.id)
+        self.context["guides"] = ordered_guides
+        self.guides = ordered_guides
         return trip
 
     def validate(self, attrs):
-        guide = attrs.get("guide")
+        guides = attrs.get("guides") or []
         service = attrs.get("guide_service")
-        if guide and service:
-            is_active = ServiceMembership.objects.filter(
-                user=guide,
-                guide_service=service,
-                role=ServiceMembership.GUIDE,
-                is_active=True,
-            ).exists()
-            if not is_active:
-                raise serializers.ValidationError({"guide": "Selected guide is not active for this service."})
+
+        seen_ids = set()
+        for guide in guides:
+            if guide.id in seen_ids:
+                raise serializers.ValidationError({"guides": "Duplicate guides are not allowed."})
+            seen_ids.add(guide.id)
+            if service:
+                is_active = ServiceMembership.objects.filter(
+                    user=guide,
+                    guide_service=service,
+                    role=ServiceMembership.GUIDE,
+                    is_active=True,
+                ).exists()
+                if not is_active:
+                    raise serializers.ValidationError(
+                        {"guides": f"{guide.display_name or guide.email} is not active for this service."}
+                    )
         return super().validate(attrs)
 
 

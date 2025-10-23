@@ -8,6 +8,8 @@
 - Use the provided make/compose commands for local work (`make up`, `make be`, `make fe`, `make down`, `make logs`). Avoid running host binaries directly unless explicitly required.
 - Keep the `.env` file aligned with `.env.example` and Docker requirements when booting the stack.
 - Running `docker compose --env-file .env -f infra/docker-compose.yml exec backend python manage.py devseed` resets seed users and passwords when you need fixture data.
+- Be sure to check for unapplied migrations in the local dev environment before starting work.
+
 
 ## Coding standards
 - Backend (Django): follow the comment guidance from `codex.yaml`—prefer concise docstrings on views, serializers, and complex helpers describing intent and side effects.

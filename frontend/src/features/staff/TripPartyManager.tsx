@@ -9,7 +9,7 @@ import {
   TripAssignment,
   TripDetail,
   listServiceGuides,
-  assignGuide,
+  assignGuides,
   GuideOption,
 } from '../trips/api'
 
@@ -25,7 +25,7 @@ export default function TripPartyManager({ trip, onClose, canEditAssignments, se
   const queryClient = useQueryClient()
   const [showAdvancedForm, setShowAdvancedForm] = useState(false)
   const [guides, setGuides] = useState<GuideOption[]>([])
-  const [selectedGuideId, setSelectedGuideId] = useState<string>('')
+  const [selectedGuideIds, setSelectedGuideIds] = useState<number[]>([])
   const [showSaved, setShowSaved] = useState(false)
 
   const tripDetailQuery = useQuery({
@@ -79,17 +79,12 @@ export default function TripPartyManager({ trip, onClose, canEditAssignments, se
     end: tripMeta?.end ?? trip.end,
     price_cents: priceCents,
   }), [trip.id, title, locationLabel, tripMeta?.start, tripMeta?.end, trip.start, trip.end, priceCents])
-  const leadAssignment = useMemo(
-    () => assignments.find((assignment) => assignment.role === 'LEAD'),
-    [assignments]
-  )
-
   useEffect(() => {
-    setSelectedGuideId(leadAssignment ? String(leadAssignment.guide_id) : '')
-  }, [leadAssignment?.guide_id])
+    setSelectedGuideIds(assignments.map((assignment) => assignment.guide_id))
+  }, [assignments])
 
-  const assignGuideMutation = useMutation({
-    mutationFn: (guideId: number | null) => assignGuide(trip.id, guideId),
+  const assignGuidesMutation = useMutation({
+    mutationFn: (guideIds: number[]) => assignGuides(trip.id, guideIds),
     onMutate: () => {
       setShowSaved(false)
     },
@@ -182,53 +177,77 @@ export default function TripPartyManager({ trip, onClose, canEditAssignments, se
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-sm font-medium text-gray-700">Guide assignment</h3>
           {canEditAssignments && (
-            assignGuideMutation.isPending ? (
+            assignGuidesMutation.isPending ? (
               <span className="text-xs text-gray-500">Saving…</span>
             ) : showSaved ? (
               <span className="text-xs text-green-600">Saved</span>
             ) : null
           )}
         </div>
-        {assignGuideMutation.isError && (
+        {assignGuidesMutation.isError && (
           <p className="text-sm text-red-600">Unable to update guide assignment. Please try again.</p>
         )}
         {canEditAssignments ? (
-          <label className="text-sm text-gray-700 block">
-            Lead guide
-            <select
-              className="mt-1 w-full border rounded px-3 py-2 bg-white"
-              value={selectedGuideId}
-              onChange={async (event) => {
-                const value = event.target.value
-                setSelectedGuideId(value)
-                try {
-                  await assignGuideMutation.mutateAsync(value ? Number(value) : null)
-                } catch {
-                  setSelectedGuideId(leadAssignment ? String(leadAssignment.guide_id) : '')
-                }
-              }}
-              disabled={assignGuideMutation.isPending || (!guides.length && !selectedGuideId)}
-            >
-              <option value="">Unassigned</option>
+          <div className="space-y-2">
+            <p className="text-xs uppercase tracking-wide text-gray-500">Assigned guides</p>
+            {guides.length === 0 && (
+              <p className="text-xs text-gray-500">No active guides available for this service.</p>
+            )}
+            <div className="flex flex-col gap-2">
               {guides.map((guide) => {
-                const name = guide.display_name || [guide.first_name, guide.last_name].filter(Boolean).join(' ').trim() || guide.email
+                const name =
+                  guide.display_name ||
+                  [guide.first_name, guide.last_name].filter(Boolean).join(' ').trim() ||
+                  guide.email
+                const isChecked = selectedGuideIds.includes(guide.id)
                 return (
-                  <option key={guide.id} value={guide.id}>{name}</option>
+                  <label key={guide.id} className="inline-flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={isChecked}
+                      onChange={async (event) => {
+                        const next = event.target.checked
+                          ? [...selectedGuideIds, guide.id]
+                          : selectedGuideIds.filter((id) => id !== guide.id)
+                        setSelectedGuideIds(next)
+                        try {
+                          await assignGuidesMutation.mutateAsync(next)
+                        } catch {
+                          setSelectedGuideIds(assignments.map((assignment) => assignment.guide_id))
+                        }
+                      }}
+                      disabled={assignGuidesMutation.isPending}
+                    />
+                    <span>{name}</span>
+                  </label>
                 )
               })}
-            </select>
-            {serviceId && guides.length === 0 && !assignGuideMutation.isPending && (
-              <p className="text-xs text-gray-500 mt-1">No active guides available for this service.</p>
-            )}
-          </label>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                className="text-xs text-blue-600 underline disabled:opacity-50"
+                onClick={async () => {
+                  setSelectedGuideIds([])
+                  try {
+                    await assignGuidesMutation.mutateAsync([])
+                  } catch {
+                    setSelectedGuideIds(assignments.map((assignment) => assignment.guide_id))
+                  }
+                }}
+                disabled={assignGuidesMutation.isPending || selectedGuideIds.length === 0}
+              >
+                Clear all
+              </button>
+            </div>
+          </div>
         ) : requiresAssignment ? (
           <p className="text-sm text-amber-700">No guide assigned yet.</p>
         ) : (
           <ul className="text-sm text-gray-700 space-y-1">
             {assignments.map((assignment) => (
-              <li key={assignment.id}>
-                {assignment.guide_name} — {assignment.role.replace('_', ' ').toLowerCase()}
-              </li>
+              <li key={assignment.id}>{assignment.guide_name}</li>
             ))}
           </ul>
         )}

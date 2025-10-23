@@ -207,12 +207,8 @@ class TripViewSet(viewsets.ModelViewSet):
             trip.delete()
             return Response({"detail": "Trip capacity would be exceeded."}, status=status.HTTP_400_BAD_REQUEST)
 
-        if guide:
-            Assignment.objects.update_or_create(
-                trip=trip,
-                guide=guide,
-                defaults={"role": Assignment.LEAD},
-            )
+        guides = serializer.context.get("guides", [])
+        self._replace_assignments(trip, guides)
 
         if not trip.title.strip():
             primary_guest = booking.primary_guest
@@ -224,33 +220,63 @@ class TripViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(output.data)
         return Response(output.data, status=status.HTTP_201_CREATED, headers=headers)
 
-    @action(detail=True, methods=["post"], url_path="assign-guide")
-    def assign_guide(self, request, pk=None):
+    def _replace_assignments(self, trip: Trip, guides):
+        guide_ids = []
+        seen = set()
+        for guide in guides:
+            guide_id = guide.id if hasattr(guide, "id") else int(guide)
+            if guide_id not in seen:
+                seen.add(guide_id)
+                guide_ids.append(guide_id)
+
+        existing_assignments = Assignment.objects.filter(trip=trip)
+        existing_ids = set(existing_assignments.values_list("guide_id", flat=True))
+        to_delete = existing_ids - set(guide_ids)
+        if to_delete:
+            Assignment.objects.filter(trip=trip, guide_id__in=to_delete).delete()
+
+        to_create = [gid for gid in guide_ids if gid not in existing_ids]
+        Assignment.objects.bulk_create(
+            [Assignment(trip=trip, guide_id=gid) for gid in to_create]
+        )
+
+    @action(detail=True, methods=["post"], url_path="assign-guides")
+    def assign_guides(self, request, pk=None):
         trip = self.get_object()
         if not self._user_can_manage_trip(request.user, trip):
             return Response({"detail": "Not permitted."}, status=status.HTTP_403_FORBIDDEN)
 
-        guide_id = request.data.get("guide_id", None)
-        if guide_id in ("", None):
-            Assignment.objects.filter(trip=trip).delete()
-        else:
-            try:
-                guide = User.objects.get(pk=guide_id)
-            except User.DoesNotExist:
-                return Response({"detail": "Guide not found."}, status=status.HTTP_404_NOT_FOUND)
+        guide_ids = request.data.get("guide_ids")
+        if guide_ids is None:
+            return Response({"detail": "guide_ids is required."}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(guide_ids, list):
+            return Response({"detail": "guide_ids must be a list."}, status=status.HTTP_400_BAD_REQUEST)
 
-            is_active = ServiceMembership.objects.filter(
+        if len(set(guide_ids)) != len(guide_ids):
+            return Response({"detail": "Duplicate guides are not allowed."}, status=status.HTTP_400_BAD_REQUEST)
+
+        guides = list(User.objects.filter(id__in=guide_ids))
+        if len(guides) != len(guide_ids):
+            return Response({"detail": "One or more guides not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        inactive = [
+            guide
+            for guide in guides
+            if not ServiceMembership.objects.filter(
                 user=guide,
                 guide_service=trip.guide_service,
                 role=ServiceMembership.GUIDE,
                 is_active=True,
             ).exists()
-            if not is_active:
-                return Response({"detail": "Guide is not active for this service."}, status=status.HTTP_400_BAD_REQUEST)
+        ]
+        if inactive:
+            names = ", ".join(guide.display_name or guide.email for guide in inactive)
+            return Response(
+                {"detail": f"The following guides are not active for this service: {names}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-            Assignment.objects.filter(trip=trip).delete()
-            Assignment.objects.create(trip=trip, guide=guide, role=Assignment.LEAD)
-
+        self._replace_assignments(trip, guides)
         trip.refresh_from_db()
         serializer = TripSerializer(trip, context=self.get_serializer_context())
         return Response(serializer.data, status=status.HTTP_200_OK)

@@ -262,7 +262,7 @@ def test_create_trip_with_party_and_guide(monkeypatch, owner, service, guide_use
         "capacity": 4,
         "price_cents": 15000,
         "description": "",
-        "guide": guide_user.id,
+        "guides": [guide_user.id],
         "party": {
             "primary_guest": {
                 "email": "guest@example.com",
@@ -278,8 +278,66 @@ def test_create_trip_with_party_and_guide(monkeypatch, owner, service, guide_use
     assert data["location"] == "Mt. Hood"
     assert len(data["parties"]) == 1
 
-    assignment = Assignment.objects.get(trip_id=data["id"], guide=guide_user)
-    assert assignment.role == Assignment.LEAD
+    assignments = Assignment.objects.filter(trip_id=data["id"])
+    assert assignments.count() == 1
+    assert assignments.first().guide == guide_user
+
+
+@pytest.mark.django_db
+def test_create_trip_with_multiple_guides(monkeypatch, owner, service, guide_user):
+    additional_guide = User.objects.create_user(
+        username="assistant@example.com",
+        email="assistant@example.com",
+        password="password123",
+        first_name="Alex",
+        last_name="Assistant",
+    )
+    ServiceMembership.objects.create(
+        user=additional_guide,
+        guide_service=service,
+        role=ServiceMembership.GUIDE,
+    )
+
+    client = APIClient()
+    client.force_authenticate(owner)
+
+    fake_session = types.SimpleNamespace(
+        payment_intent="pi_test",
+        id="cs_test",
+        payment_status="unpaid",
+        url="https://stripe.test/checkout",
+    )
+
+    monkeypatch.setattr("trips.api.create_checkout_session", lambda **kwargs: fake_session)
+    monkeypatch.setattr("trips.api.send_booking_confirmation_email", lambda **kwargs: None)
+
+    start = timezone.now() + timezone.timedelta(days=5)
+    end = start + timezone.timedelta(days=1)
+
+    payload = {
+        "guide_service": service.id,
+        "title": "Team Trip",
+        "location": "Mt. Hood",
+        "start": start.isoformat().replace("+00:00", "Z"),
+        "end": end.isoformat().replace("+00:00", "Z"),
+        "capacity": 6,
+        "price_cents": 22000,
+        "description": "",
+        "guides": [guide_user.id, additional_guide.id],
+        "party": {
+            "primary_guest": {
+                "email": "guest@example.com",
+                "first_name": "Greta",
+                "last_name": "Guest",
+            }
+        },
+    }
+
+    response = client.post("/api/trips/", payload, format="json")
+    assert response.status_code == 201
+    data = response.json()
+    assignments = Assignment.objects.filter(trip_id=data["id"]).order_by("guide_id")
+    assert list(assignments.values_list("guide_id", flat=True)) == sorted([guide_user.id, additional_guide.id])
 
 
 @pytest.mark.django_db
@@ -294,13 +352,13 @@ def test_service_guides_endpoint(owner, service, guide_user):
 
 
 @pytest.mark.django_db
-def test_assign_guide_endpoint(owner, service, guide_user, trip):
+def test_assign_guides_endpoint(owner, service, guide_user, trip):
     client = APIClient()
     client.force_authenticate(owner)
 
     assign_response = client.post(
-        f"/api/trips/{trip.id}/assign-guide/",
-        {"guide_id": guide_user.id},
+        f"/api/trips/{trip.id}/assign-guides/",
+        {"guide_ids": [guide_user.id]},
         format="json",
     )
     assert assign_response.status_code == 200
@@ -309,11 +367,24 @@ def test_assign_guide_endpoint(owner, service, guide_user, trip):
     assert payload["assignments"][0]["guide_id"] == guide_user.id
 
     unassign_response = client.post(
-        f"/api/trips/{trip.id}/assign-guide/",
-        {"guide_id": None},
+        f"/api/trips/{trip.id}/assign-guides/",
+        {"guide_ids": []},
         format="json",
     )
     assert unassign_response.status_code == 200
     payload = unassign_response.json()
     assert payload["requires_assignment"] is True
     assert payload["assignments"] == []
+
+
+@pytest.mark.django_db
+def test_assign_guides_endpoint_rejects_duplicates(owner, service, guide_user, trip):
+    client = APIClient()
+    client.force_authenticate(owner)
+
+    response = client.post(
+        f"/api/trips/{trip.id}/assign-guides/",
+        {"guide_ids": [guide_user.id, guide_user.id]},
+        format="json",
+    )
+    assert response.status_code == 400

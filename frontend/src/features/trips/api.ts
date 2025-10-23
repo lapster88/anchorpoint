@@ -4,7 +4,6 @@ import { CreatePartyPayload, TripPartySummary } from '../staff/api'
 export type TripAssignment = {
   id: number
   guide_id: number
-  role: string
   guide_name: string
 }
 
@@ -35,7 +34,7 @@ export type CreateTripPayload = {
   price_cents: number
   difficulty?: string | null
   description?: string
-  guide?: number | null
+  guides?: number[]
   party: CreatePartyPayload
 }
 
@@ -57,8 +56,8 @@ export async function listServiceGuides(serviceId: number): Promise<GuideOption[
   return data
 }
 
-export async function assignGuide(tripId: number, guideId: number | null): Promise<TripDetail> {
-  const { data } = await api.post<TripDetail>(`/api/trips/${tripId}/assign-guide/`, { guide_id: guideId })
+export async function assignGuides(tripId: number, guideIds: number[]): Promise<TripDetail> {
+  const { data } = await api.post<TripDetail>(`/api/trips/${tripId}/assign-guides/`, { guide_ids: guideIds })
   return data
 }
 

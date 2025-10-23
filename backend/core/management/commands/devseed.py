@@ -136,9 +136,9 @@ class Command(BaseCommand):
                 difficulty="Advanced",
             )
 
-            Assignment.objects.create(trip=trad_trip, guide=guide, role=Assignment.LEAD)
-            Assignment.objects.create(trip=glacier_trip, guide=guide, role=Assignment.LEAD)
-            Assignment.objects.create(trip=desert_trip, guide=flex_guide, role=Assignment.LEAD)
+            Assignment.objects.create(trip=trad_trip, guide=guide)
+            Assignment.objects.create(trip=glacier_trip, guide=guide)
+            Assignment.objects.create(trip=desert_trip, guide=flex_guide)
 
             self.stdout.write(self.style.MIGRATE_HEADING("Creating manual availability and bookings"))
             GuideAvailability.objects.filter(

@@ -10,10 +10,10 @@ const { listTripParties } = vi.hoisted(() => ({
   listTripParties: vi.fn(),
 }))
 
-const { getTrip, listServiceGuides, assignGuide } = vi.hoisted(() => ({
+const { getTrip, listServiceGuides, assignGuides } = vi.hoisted(() => ({
   getTrip: vi.fn(),
   listServiceGuides: vi.fn(),
-  assignGuide: vi.fn(),
+  assignGuides: vi.fn(),
 }))
 
 vi.mock('../api', () => ({
@@ -23,7 +23,7 @@ vi.mock('../api', () => ({
 vi.mock('../../trips/api', () => ({
   getTrip,
   listServiceGuides,
-  assignGuide,
+  assignGuides,
 }))
 
 const mockCreate = vi.fn()
@@ -88,11 +88,11 @@ describe('TripPartyManager', () => {
     listServiceGuides.mockResolvedValue([
       { id: 10, display_name: 'Gabe Guide', first_name: 'Gabe', last_name: 'Guide', email: 'guide@example.com' }
     ])
-    assignGuide.mockImplementation(async () => {
+    assignGuides.mockImplementation(async () => {
       const updated = {
         ...tripDetail,
         assignments: [
-          { id: 200, guide_id: 10, role: 'LEAD', guide_name: 'Gabe Guide' }
+          { id: 200, guide_id: 10, guide_name: 'Gabe Guide' }
         ],
         requires_assignment: false,
       }
@@ -130,7 +130,7 @@ describe('TripPartyManager', () => {
     renderManager()
 
     expect(await screen.findByText(/Manage Glacier Intro/)).toBeInTheDocument()
-    expect(await screen.findByLabelText(/Lead guide/)).toBeInTheDocument()
+    expect(await screen.findByText(/Assigned guides/i)).toBeInTheDocument()
     const guestLabels = await screen.findAllByText(/Greta Guest/)
     expect(guestLabels.length).toBeGreaterThan(0)
     const paymentLabels = await screen.findAllByText(/^Payment$/)
@@ -186,19 +186,23 @@ describe('TripPartyManager', () => {
     const onTripUpdate = vi.fn()
     renderManager({ onTripUpdate })
 
-    const select = await screen.findByLabelText(/Lead guide/)
-    await userEvent.selectOptions(select, '10')
+    const checkbox = await screen.findByLabelText('Gabe Guide')
+    await userEvent.click(checkbox)
 
     await waitFor(() => {
-      expect(assignGuide).toHaveBeenCalledWith(trip.id, 10)
+      expect(assignGuides).toHaveBeenCalledWith(trip.id, [10])
     })
     await waitFor(() => {
       expect(onTripUpdate).toHaveBeenCalledWith(expect.objectContaining({ requires_assignment: false }))
     })
     expect(await screen.findByText('Saved')).toBeInTheDocument()
+    expect((await screen.findByLabelText('Gabe Guide')) as HTMLInputElement).toBeChecked()
+
+    await userEvent.click(await screen.findByRole('button', { name: /Clear all/i }))
     await waitFor(() => {
-      expect((screen.getByLabelText(/Lead guide/) as HTMLSelectElement).value).toBe('10')
+      expect(assignGuides).toHaveBeenCalledWith(trip.id, [])
     })
+    expect((await screen.findByLabelText('Gabe Guide')) as HTMLInputElement).not.toBeChecked()
   })
 
   it('shows read-only assignment when editing disabled', async () => {
@@ -206,7 +210,7 @@ describe('TripPartyManager', () => {
       ...trip,
       parties: [],
       assignments: [
-        { id: 20, guide_id: 10, role: 'LEAD', guide_name: 'Gabe Guide' }
+        { id: 20, guide_id: 10, guide_name: 'Gabe Guide' }
       ],
       requires_assignment: false,
       difficulty: null,
@@ -216,6 +220,6 @@ describe('TripPartyManager', () => {
     renderManager({ canEditAssignments: false, serviceId: null })
 
     expect(await screen.findByText(/Gabe Guide/)).toBeInTheDocument()
-    expect(screen.queryByLabelText(/Lead guide/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Assigned guides/)).not.toBeInTheDocument()
   })
 })

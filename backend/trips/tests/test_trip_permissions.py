@@ -85,7 +85,7 @@ def test_guide_only_sees_assigned_trips(guide_service_a, guide_service_b):
     other_trip_same_service = _create_trip(guide_service_a, "Other trip")
     other_service_trip = _create_trip(guide_service_b, "Foreign trip")
 
-    Assignment.objects.create(trip=assigned_trip, guide=guide, role=Assignment.LEAD)
+    Assignment.objects.create(trip=assigned_trip, guide=guide)
 
     client = APIClient()
     client.force_authenticate(user=guide)

@@ -80,7 +80,7 @@ export default function TripGuideDetails({ trip, onClose }: Props){
               <ul className="text-sm text-gray-700 space-y-1 mt-2">
                 {assignments.map((assignment) => (
                   <li key={assignment.id}>
-                    {assignment.guide_name} — {assignment.role.replace('_', ' ').toLowerCase()}
+                    {assignment.guide_name}
                   </li>
                 ))}
               </ul>

@@ -38,7 +38,7 @@ def trip(db, guide_service):
 
 
 def test_assignment_creates_unavailable_block(db, guide, trip):
-    Assignment.objects.create(trip=trip, guide=guide, role=Assignment.LEAD)
+    Assignment.objects.create(trip=trip, guide=guide)
 
     availability = GuideAvailability.objects.get(guide=guide, trip=trip, source=GuideAvailability.SOURCE_ASSIGNMENT)
     assert availability.is_available is False
@@ -50,7 +50,7 @@ def test_assignment_creates_unavailable_block(db, guide, trip):
 
 
 def test_assignment_update_refreshes_block(db, guide, trip):
-    assignment = Assignment.objects.create(trip=trip, guide=guide, role=Assignment.LEAD)
+    assignment = Assignment.objects.create(trip=trip, guide=guide)
     new_start = trip.start + timezone.timedelta(hours=2)
     new_end = trip.end + timezone.timedelta(hours=2)
     trip.start = new_start
@@ -64,7 +64,7 @@ def test_assignment_update_refreshes_block(db, guide, trip):
 
 
 def test_assignment_delete_removes_block(db, guide, trip):
-    assignment = Assignment.objects.create(trip=trip, guide=guide, role=Assignment.LEAD)
+    assignment = Assignment.objects.create(trip=trip, guide=guide)
     assignment.delete()
 
     assert not GuideAvailability.objects.filter(guide=guide, trip=trip, source=GuideAvailability.SOURCE_ASSIGNMENT).exists()
