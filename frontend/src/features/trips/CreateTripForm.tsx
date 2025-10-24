@@ -10,7 +10,6 @@ import {
   listServiceTripTemplates,
   TripTemplateOption
 } from './api'
-import { listPricingModels, PricingModel } from '../service/api'
 import { CreatePartyPayload } from '../staff/api'
 
 const emptyGuest = { email: '', first_name: '', last_name: '', phone: '' }
@@ -39,7 +38,6 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
   const [guides, setGuides] = useState<GuideOption[]>([])
   const [selectedGuideIds, setSelectedGuideIds] = useState<number[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
-  const [selectedPricingModelId, setSelectedPricingModelId] = useState<string>('')
 
   const [primary, setPrimary] = useState<GuestForm>(emptyGuest)
   const [additionalGuests, setAdditionalGuests] = useState<GuestForm[]>([])
@@ -51,12 +49,6 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
   const templatesQuery = useQuery({
     queryKey: ['trip-templates', serviceId],
     queryFn: () => listServiceTripTemplates(serviceId!),
-    enabled: Boolean(serviceId)
-  })
-
-  const pricingModelsQuery = useQuery({
-    queryKey: ['pricing-models', serviceId],
-    queryFn: () => listPricingModels(serviceId!),
     enabled: Boolean(serviceId)
   })
 
@@ -73,20 +65,14 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
   })
 
   const templates = templatesQuery.data ?? []
-  const pricingModels = pricingModelsQuery.data ?? []
   const selectedTemplate = useMemo(
     () => templates.find((template) => String(template.id) === selectedTemplateId),
     [templates, selectedTemplateId]
   )
-  const selectedPricingModel = useMemo(() => {
-    const id = selectedPricingModelId || (selectedTemplate ? String(selectedTemplate.pricing_model) : '')
-    if (!id) return undefined
-    return pricingModels.find((model) => String(model.id) === id)
-  }, [pricingModels, selectedPricingModelId, selectedTemplate])
 
   const mutationInFlight = mutation.isLoading
-  const hasPricingModel = Boolean(selectedTemplate) || Boolean(selectedPricingModelId)
-  const priceInputDisabled = hasPricingModel
+  const hasTemplatePricing = Boolean(selectedTemplate)
+  const priceInputDisabled = hasTemplatePricing
 
   const calculatedPartySize = useMemo(() => {
     const base = 1 + additionalGuests.filter((guest) => guest.email.trim()).length
@@ -126,7 +112,7 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
     }
 
     const priceNumber = Number(price)
-    if (!hasPricingModel) {
+    if (!hasTemplatePricing) {
       if (Number.isNaN(priceNumber) || priceNumber <= 0) {
         setError('Price must be greater than zero.')
         return
@@ -163,9 +149,6 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
     if (selectedTemplate) {
       payload.template = selectedTemplate.id
     }
-    if (selectedPricingModel) {
-      payload.pricing_model = selectedPricingModel.id
-    }
     if (!selectedTemplate && durationHours.trim()) {
       payload.duration_hours = Number(durationHours)
     } else if (selectedTemplate) {
@@ -184,7 +167,7 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
     if (notes.trim()) {
       payload.notes = notes.trim()
     }
-    if (!hasPricingModel) {
+    if (!hasTemplatePricing) {
       payload.price_cents = Math.round(priceNumber * 100)
     }
 
@@ -196,8 +179,7 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
     if (!serviceId) {
       setGuides([])
       setSelectedGuideIds([])
-        setSelectedTemplateId('')
-      setSelectedPricingModelId('')
+      setSelectedTemplateId('')
       setDurationHours('')
       setTargetClients('')
       setTargetGuides('')
@@ -231,6 +213,9 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
       if (prevTemplateIdRef.current) {
         prevTemplateIdRef.current = ''
       }
+      if (manualPriceRef.current !== undefined) {
+        setPrice(manualPriceRef.current)
+      }
       return
     }
     if (prevTemplateIdRef.current === selectedTemplateId) {
@@ -243,29 +228,18 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
     setTargetClients(String(selectedTemplate.target_client_count || ''))
     setTargetGuides(String(selectedTemplate.target_guide_count || ''))
     setNotes(selectedTemplate.notes || '')
-    setSelectedPricingModelId(String(selectedTemplate.pricing_model))
+    const firstTier = selectedTemplate.pricing_tiers[0]
+    setPrice(firstTier ? String(firstTier.price_per_guest) : '')
   }, [selectedTemplate, selectedTemplateId])
 
   useEffect(() => {
-    if (!hasPricingModel) {
-      if (manualPriceRef.current && priceInputDisabled) {
-        setPrice(manualPriceRef.current)
-      }
-      return
-    }
-    if (selectedPricingModel && selectedPricingModel.tiers.length) {
-      const base = selectedPricingModel.tiers[0].price_per_guest
-      setPrice(String(base))
-    } else {
-      setPrice('')
-    }
-  }, [hasPricingModel, selectedPricingModel])
-
-  useEffect(() => {
-    if (!hasPricingModel) {
+    if (!hasTemplatePricing) {
       manualPriceRef.current = price
+    } else if (selectedTemplate) {
+      const firstTier = selectedTemplate.pricing_tiers[0]
+      setPrice(firstTier ? String(firstTier.price_per_guest) : '')
     }
-  }, [hasPricingModel, price])
+  }, [hasTemplatePricing, price, selectedTemplate])
 
   if (!serviceId) {
     return (
@@ -309,11 +283,13 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
               const value = event.target.value
               setSelectedTemplateId(value)
               if (!value) {
-                setSelectedPricingModelId('')
                 setDurationHours('')
                 setTargetClients('')
                 setTargetGuides('')
                 setNotes('')
+                if (manualPriceRef.current){
+                  setPrice(manualPriceRef.current)
+                }
               }
             }}
           >
@@ -378,30 +354,10 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
           />
         </div>
 
-        <label className="block text-sm font-medium text-gray-700">
-          Pricing model
-          <select
-            className="mt-1 w-full rounded border px-3 py-2"
-            value={selectedTemplate ? String(selectedTemplate.pricing_model) : selectedPricingModelId}
-            onChange={(event) => setSelectedPricingModelId(event.target.value)}
-            disabled={Boolean(selectedTemplate)}
-          >
-            <option value="">Manual price per guest</option>
-            {pricingModels.map((model) => (
-              <option key={model.id} value={String(model.id)}>
-                {model.name}
-              </option>
-            ))}
-          </select>
-          {pricingModelsQuery.isLoading && (
-            <span className="mt-1 block text-xs text-gray-500">Loading pricing models…</span>
-          )}
-        </label>
-
-        {selectedPricingModel && (
+        {selectedTemplate && (
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-            <p className="font-medium text-slate-800">{selectedPricingModel.name}</p>
-            <PricingTiers tiers={selectedPricingModel.tiers} currency={selectedPricingModel.currency} />
+            <p className="font-medium text-slate-800">Pricing preview</p>
+            <PricingTiers tiers={selectedTemplate.pricing_tiers} currency={selectedTemplate.pricing_currency} />
           </div>
         )}
 
@@ -415,11 +371,11 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
             onChange={(event) => setPrice(event.target.value)}
             className="mt-1 w-full rounded border px-3 py-2"
             disabled={priceInputDisabled}
-            required={!hasPricingModel}
+          required={!hasTemplatePricing}
           />
-          {hasPricingModel && (
+          {hasTemplatePricing && (
             <span className="mt-1 block text-xs text-gray-500">
-              Pricing is based on the selected pricing model tiers.
+              Pricing is based on the selected template tiers.
             </span>
           )}
         </label>
@@ -656,7 +612,7 @@ function PartyTextField({ label, value, onChange, required, type = 'text' }: Par
 }
 
 type PricingTiersProps = {
-  tiers: PricingModel['tiers']
+  tiers: TripTemplateOption['pricing_tiers']
   currency: string
 }
 
@@ -666,9 +622,9 @@ function PricingTiers({ tiers, currency }: PricingTiersProps){
   }
   return (
     <dl className="mt-2 space-y-1">
-      {tiers.map((tier) => (
+      {tiers.map((tier, index) => (
         <div
-          key={tier.id ?? `${tier.min_guests}-${tier.max_guests ?? 'open'}`}
+          key={`${tier.min_guests}-${tier.max_guests ?? 'open'}-${index}`}
           className="flex items-center justify-between rounded border border-slate-200 bg-white px-3 py-2"
         >
           <dt className="text-xs text-slate-500">

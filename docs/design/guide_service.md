@@ -1,6 +1,6 @@
 # Guide Service Features — Design Outline
 
-This document captures the implementation plan for the guide service management user stories. The scope currently includes Stripe Connect integration, branding (logo upload), pricing models, trip templates, and guide roster management. Reporting features are deferred until requirements are finalized.
+This document captures the implementation plan for the guide service management user stories. The scope currently includes Stripe Connect integration, branding (logo upload), trip templates, and guide roster management. Reporting features are deferred until requirements are finalized.
 
 ## Stripe Connect Integration
 
@@ -74,111 +74,29 @@ This document captures the implementation plan for the guide service management 
 - Consider future enhancement for direct-upload via S3 pre-signed URLs if needed.
 - Update devseed with placeholder logos stored locally.
 
-## Pricing Models
-
-### Requirements
-- Each service defines pricing models used when creating trips.
-- Pricing model fields:
-  - Name, description (optional).
-  - Default location (optional, for auto-population).
-  - Currency (default USD).
-  - Deposit configuration: `is_deposit_required`, `deposit_percent` (percentage-based).
-- Pricing tiers:
-  - Price per guest for specific guest counts.
-  - Final tier supports “greater than” guests via `max_guests = null`.
-
-### Backend
-1. Models:
-   ```python
-   class PricingModel(models.Model):
-       service = ForeignKey(GuideService)
-       name, description
-       default_location
-       currency
-       is_deposit_required
-       deposit_percent  # 0-100
-       created_by, created_at, updated_at
-
-   class PricingTier(models.Model):
-       model = ForeignKey(PricingModel, related_name="tiers")
-       min_guests
-       max_guests  # null for “greater than”
-       price_per_guest
-       unique_together: (model, min_guests)
-   ```
-2. Validation:
-   - Ensure tiers are contiguous, ordered ascending.
-   - Require final tier with `max_guests = null` for open-ended pricing (optional but recommended).
-   - Validate percentage range for deposits.
-3. API: CRUD endpoints for PricingModel with nested tier management (create/update tiers together).
-   - Expose list/retrieve for guides if needed, but restrict create/update/delete to owners/managers.
-   - Nested writes should validate contiguity and ensure the final tier covers the open-ended range.
-
-### Frontend
-1. Pricing tab in service settings:
-   - List existing pricing models with quick summary (deposit %, locations, number of tiers).
-   - Modal/form to create/edit:
-     - Add tiers row-by-row (1 guest, 2 guests, etc., final row “4+”).
-     - Toggle deposit required, set percent.
-2. On save, refresh list; show validation errors from backend.
-
-### Tests
-- Serializer validation for tier ordering, deposit percent boundaries.
-- API tests for create/update/delete with permission checks.
-- Frontend component tests for tier builder interactions.
-
 ## Trip Templates
 
 ### Requirements
-- Templates speed up trip creation.
-- Fields: title, duration (hours), location, linked pricing model, target client:guide ratio (integer pair), optional notes, active flag.
-- Templates should reflect **current** pricing models; changes to pricing affect future trips but should not retroactively update existing trips.
-- When creating a trip from a template, **snapshot** pricing and template metadata to avoid future changes affecting the booked trip.
+- Templates bundle reusable trip metadata (title, duration, location, staffing ratios) and tiered pricing.
+- Pricing fields: currency, optional deposit percent, and contiguous per-guest tiers ending in an open-ended tier.
+- Templates can be duplicated to jump-start variations (e.g., seasonal tweaks).
+- When a trip is created from a template we snapshot the template metadata + pricing so later edits do not affect booked trips.
 
 ### Backend
-1. Model:
-   ```python
-   class TripTemplate(models.Model):
-       service = ForeignKey(GuideService)
-       title
-       duration_hours
-       location
-       pricing_model = ForeignKey(PricingModel)
-       target_ratio_clients
-       target_ratio_guides
-       notes
-       is_active
-       created_by, created_at, updated_at
-   ```
-2. Update `Trip` model (if needed) with fields:
-   - `template_snapshot` (JSON) capturing template fields at time of use.
-   - `pricing_snapshot` (JSON) capturing tiers + deposit percent.
-   - Possibly `template_used` (FK to TripTemplate) for traceability.
-3. Trip creation logic:
-   - If request includes `template_id`, fetch template & associated pricing.
-   - Copy template fields into trip fields (title, duration, location, notes, ratio).
-   - Snapshot pricing structure and deposit percent.
-4. API:
-   - CRUD endpoints for templates.
-   - `GET /api/orgs/<service_id>/trip-templates` for listing in trip creation form.
-   - Trip creation endpoint to accept `template_id`.
+1. `TripTemplate` stores metadata plus pricing JSON (`pricing_currency`, `is_deposit_required`, `deposit_percent`, `pricing_tiers`).
+2. Trip creation snapshots the template via `template_snapshot` and writes a flattened `pricing_snapshot` on the trip.
+3. Template duplication endpoint clones the template (including pricing tiers) and prefixes the title with "(Copy)".
+4. Validation enforces contiguous tiers, starting at guest count 1 with the final tier open-ended.
 
 ### Frontend
-1. Settings → Templates tab:
-   - List templates with action buttons (edit, deactivate).
-   - Create/edit modal with fields above; include pricing model dropdown.
-2. Trip creation UI:
-   - Dropdown to select template (including “Custom trip” option).
-   - On selection, pre-fill fields and show read-only preview of pricing snapshot; allow user overrides where appropriate (e.g., title override? confirm with product).
-   - Show deposit calculated from snapshot.
-
-**Implementation note (Oct 2025):** Service settings now include a Templates card for owners/managers. Staff can create/edit templates tied to existing pricing models, and trip creation supports selecting a template to prefill details while snapping the pricing tiers into the new trip payload.
+1. Service settings expose a templates card listing templates, pricing previews, and actions (edit, duplicate, deactivate/delete).
+2. The modal editor captures metadata + tier rows directly (no separate pricing screen).
+3. Trip create form shows a template dropdown; choosing a template pre-fills metadata, displays pricing tiers, and disables manual price entry.
+4. Manual trips still collect duration/ratio/price; templates remain optional.
 
 ### Tests
-- Backend tests for template CRUD, trip creation snapshot logic.
-- Ensure updating a template later does not mutate existing trips.
-- Frontend tests for template selection/pre-fill.
-
+- Backend tests cover template CRUD, duplication, and trip snapshot behavior.
+- Frontend tests cover template management UI (create/edit/duplicate/delete) and trip form interactions with templates.
 ## Guide Roster
 
 ### Requirements Recap
@@ -236,7 +154,7 @@ This document captures the implementation plan for the guide service management 
 
 - **Trip Creation**: Ensure UI and API leverage pricing snapshots and template metadata.
 - **Docs**: Update `docs/PROJECT_CONTEXT.md` and onboarding docs with new settings.
-- **Seeds**: Add sample pricing model, template, guide invite to devseed.
+- **Seeds**: Add sample trip template and guide invite to devseed.
 - **Environment**: Document S3 and Stripe env vars; update `.env.example`.
 - **Testing**:  
   - Backend: unit and API tests per feature.  

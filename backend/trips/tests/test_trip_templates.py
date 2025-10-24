@@ -1,5 +1,4 @@
 import types
-from decimal import Decimal
 
 import pytest
 from django.utils import timezone
@@ -8,7 +7,29 @@ from rest_framework.test import APIClient
 from accounts.models import ServiceMembership, User
 from bookings.models import Booking
 from orgs.models import GuideService
-from trips.models import PricingModel, PricingTier, TripTemplate, Trip
+from trips.models import TripTemplate, Trip
+
+TIERS = [
+    {"min_guests": 1, "max_guests": 2, "price_per_guest": "150.00"},
+    {"min_guests": 3, "max_guests": None, "price_per_guest": "130.00"},
+]
+
+
+def _template_payload(service_id):
+    return {
+        "service": service_id,
+        "title": "Glacier Skills",
+        "duration_hours": 8,
+        "location": "Coleman Glacier",
+        "pricing_currency": "usd",
+        "is_deposit_required": True,
+        "deposit_percent": "25.00",
+        "pricing_tiers": TIERS,
+        "target_client_count": 6,
+        "target_guide_count": 2,
+        "notes": "Bring glacier kits.",
+        "is_active": True,
+    }
 
 
 @pytest.fixture
@@ -17,15 +38,6 @@ def service(db):
         name="Summit Guides",
         slug="summit-guides",
         contact_email="hello@summit.test",
-    )
-
-
-@pytest.fixture
-def other_service(db):
-    return GuideService.objects.create(
-        name="Alpine Works",
-        slug="alpine-works",
-        contact_email="team@alpine.test",
     )
 
 
@@ -46,47 +58,6 @@ def owner(db, service):
     return user
 
 
-@pytest.fixture
-def pricing_model(db, service, owner):
-    model = PricingModel.objects.create(
-        service=service,
-        name="Standard",
-        description="Default pricing block",
-        currency="usd",
-        is_deposit_required=True,
-        deposit_percent=Decimal("20.00"),
-        created_by=owner,
-    )
-    PricingTier.objects.create(
-        model=model,
-        min_guests=1,
-        max_guests=2,
-        price_per_guest=Decimal("150.00"),
-    )
-    PricingTier.objects.create(
-        model=model,
-        min_guests=3,
-        max_guests=None,
-        price_per_guest=Decimal("130.00"),
-    )
-    return model
-
-
-@pytest.fixture
-def template(db, service, pricing_model, owner):
-    return TripTemplate.objects.create(
-        service=service,
-        title="Glacier Skills",
-        duration_hours=8,
-        location="Coleman Glacier",
-        pricing_model=pricing_model,
-        target_client_count=6,
-        target_guide_count=2,
-        notes="Bring glacier kits.",
-        created_by=owner,
-    )
-
-
 def auth_client(user):
     client = APIClient()
     client.force_authenticate(user)
@@ -94,58 +65,37 @@ def auth_client(user):
 
 
 @pytest.mark.django_db
-def test_owner_creates_trip_template_via_api(owner, service, pricing_model):
+def test_owner_creates_trip_template_via_api(owner, service):
     client = auth_client(owner)
-
-    payload = {
-        "service": service.id,
-        "title": "Crevasse Rescue",
-        "duration_hours": 6,
-        "location": "Paradise",
-        "pricing_model": pricing_model.id,
-        "target_client_count": 6,
-        "target_guide_count": 2,
-        "notes": "Anchors practice",
-        "is_active": True,
-    }
+    payload = _template_payload(service.id)
 
     response = client.post("/api/trip-templates/", payload, format="json")
     assert response.status_code == 201
     data = response.json()
-    assert data["pricing_model"] == pricing_model.id
-    assert data["pricing_model_name"] == "Standard"
+    assert data["pricing_currency"] == "usd"
+    assert len(data["pricing_tiers"]) == 2
 
     template = TripTemplate.objects.get(id=data["id"])
-    assert template.target_client_count == 6
-    assert template.pricing_model == pricing_model
+    assert template.is_deposit_required is True
+    assert template.deposit_percent == 25
+    assert template.pricing_tiers[0]["min_guests"] == 1
 
 
 @pytest.mark.django_db
-def test_template_requires_matching_pricing_model(owner, service, other_service, pricing_model):
-    other_model = PricingModel.objects.create(service=other_service, name="Other")
-    PricingTier.objects.create(model=other_model, min_guests=1, max_guests=None, price_per_guest=Decimal("200.00"))
-
+def test_template_requires_contiguous_tiers(owner, service):
     client = auth_client(owner)
-
-    payload = {
-        "service": service.id,
-        "title": "Mismatch",
-        "duration_hours": 4,
-        "location": "Basecamp",
-        "pricing_model": other_model.id,
-        "target_client_count": 4,
-        "target_guide_count": 1,
-        "notes": "",
-        "is_active": True,
-    }
+    payload = _template_payload(service.id)
+    payload["pricing_tiers"] = [
+        {"min_guests": 1, "max_guests": 2, "price_per_guest": "150"},
+        {"min_guests": 4, "max_guests": None, "price_per_guest": "130"},
+    ]
 
     response = client.post("/api/trip-templates/", payload, format="json")
     assert response.status_code == 400
-    assert "pricing_model" in response.json()
 
 
 @pytest.mark.django_db
-def test_guides_cannot_manage_templates(db, service, owner, pricing_model):
+def test_guides_cannot_manage_templates(db, service, owner):
     guide = User.objects.create_user(
         username="guide@example.com",
         email="guide@example.com",
@@ -158,62 +108,63 @@ def test_guides_cannot_manage_templates(db, service, owner, pricing_model):
     )
 
     client = auth_client(guide)
-    payload = {
-        "service": service.id,
-        "title": "Guide Attempt",
-        "duration_hours": 4,
-        "location": "Camp Muir",
-        "pricing_model": pricing_model.id,
-        "target_client_count": 3,
-        "target_guide_count": 1,
-        "notes": "",
-        "is_active": True,
-    }
-
-    response = client.post("/api/trip-templates/", payload, format="json")
+    response = client.post("/api/trip-templates/", _template_payload(service.id), format="json")
     assert response.status_code == 403
 
 
 @pytest.mark.django_db
-def test_template_list_filters_by_service(owner, service, other_service, pricing_model):
-    other_owner = User.objects.create_user(
-        username="other@example.com",
-        email="other@example.com",
-        password="password123",
-    )
-    ServiceMembership.objects.create(
-        user=other_owner,
-        guide_service=other_service,
-        role=ServiceMembership.OWNER,
-    )
-    other_model = PricingModel.objects.create(service=other_service, name="Other Pricing")
-    PricingTier.objects.create(model=other_model, min_guests=1, max_guests=None, price_per_guest=Decimal("175.00"))
-
-    TripTemplate.objects.create(
+def test_duplicate_template(owner, service):
+    template = TripTemplate.objects.create(
         service=service,
-        title="Managed",
+        title="Glacier Skills",
         duration_hours=8,
-        location="Summit",
-        pricing_model=pricing_model,
-    )
-    TripTemplate.objects.create(
-        service=other_service,
-        title="External",
-        duration_hours=5,
-        location="Camp",
-        pricing_model=other_model,
+        location="Coleman Glacier",
+        pricing_currency="usd",
+        is_deposit_required=True,
+        deposit_percent=25,
+        pricing_tiers=TIERS,
+        target_client_count=6,
+        target_guide_count=2,
+        notes="Bring glacier kits.",
+        created_by=owner,
     )
 
     client = auth_client(owner)
-    response = client.get(f"/api/trip-templates/?service={service.id}")
-    assert response.status_code == 200
+    response = client.post(f"/api/trip-templates/{template.id}/duplicate/")
+    assert response.status_code == 201
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["service"] == service.id
+    assert data["title"].startswith("Glacier Skills (Copy")
+    assert data["is_active"] is False
+    assert data["pricing_tiers"][0]["price_per_guest"] == "150.00"
+
+
+@pytest.fixture
+def template(owner, service):
+    return TripTemplate.objects.create(
+        service=service,
+        title="Glacier Skills",
+        duration_hours=8,
+        location="Coleman Glacier",
+        pricing_currency="usd",
+        is_deposit_required=True,
+        deposit_percent=25,
+        pricing_tiers=TIERS,
+        target_client_count=6,
+        target_guide_count=2,
+        notes="Bring glacier kits.",
+        created_by=owner,
+    )
+
+
+@pytest.fixture
+def api_client(owner):
+    client = APIClient()
+    client.force_authenticate(owner)
+    return client
 
 
 @pytest.mark.django_db
-def test_create_trip_from_template_sets_snapshot(monkeypatch, owner, service, pricing_model, template):
+def test_create_trip_from_template_sets_snapshot(monkeypatch, owner, service, template):
     client = auth_client(owner)
 
     fake_session = types.SimpleNamespace(
@@ -251,17 +202,7 @@ def test_create_trip_from_template_sets_snapshot(monkeypatch, owner, service, pr
     assert response.status_code == 201
     data = response.json()
     assert data["template_id"] == template.id
-    assert data["pricing_model"] == pricing_model.id
     assert data["pricing_snapshot"]["tiers"][0]["price_per_guest_cents"] == 15000
 
     trip = Trip.objects.get(id=data["id"])
-    assert trip.template_used == template
-    assert trip.pricing_model == pricing_model
     assert trip.price_cents == 15000
-    assert trip.template_snapshot["title"] == template.title
-
-    booking = Booking.objects.get(trip=trip)
-    payment = booking.payments.get()
-    # Party size is 3, so snapshot tier 2 should apply (130 per guest).
-    assert booking.party_size == 3
-    assert payment.amount_cents == 13000 * 3

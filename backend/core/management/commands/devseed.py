@@ -10,7 +10,7 @@ from accounts.models import ServiceMembership, User
 from bookings.models import Booking, BookingGuest, GuestProfile
 from bookings.services.guest_tokens import issue_guest_access_token
 from orgs.models import GuideService
-from trips.models import Assignment, Trip, PricingModel, PricingTier, TripTemplate
+from trips.models import Assignment, Trip, TripTemplate
 
 
 SEED_PASSWORD = "Anchorpoint123!"
@@ -149,29 +149,19 @@ class Command(BaseCommand):
             Assignment.objects.create(trip=glacier_trip, guide=guide)
             Assignment.objects.create(trip=desert_trip, guide=flex_guide)
 
-            pricing_model, _ = PricingModel.objects.update_or_create(
-                service=summit_service,
-                name="Standard",
-                defaults={
-                    "description": "Default summit pricing",
-                    "is_deposit_required": True,
-                    "deposit_percent": 25,
-                    "created_by": owner,
-                },
-            )
-            pricing_model.tiers.all().delete()
-            PricingTier.objects.bulk_create([
-                PricingTier(model=pricing_model, min_guests=1, max_guests=2, price_per_guest=150),
-                PricingTier(model=pricing_model, min_guests=3, max_guests=None, price_per_guest=120),
-            ])
-
             TripTemplate.objects.update_or_create(
                 service=summit_service,
                 title="Glacier Skills Day",
                 defaults={
                     "duration_hours": 8,
                     "location": "Mount Baker, WA",
-                    "pricing_model": pricing_model,
+                    "pricing_currency": "usd",
+                    "is_deposit_required": True,
+                    "deposit_percent": 25,
+                    "pricing_tiers": [
+                        {"min_guests": 1, "max_guests": 2, "price_per_guest": "150.00"},
+                        {"min_guests": 3, "max_guests": None, "price_per_guest": "120.00"},
+                    ],
                     "target_client_count": 6,
                     "target_guide_count": 2,
                     "notes": "Bring glacier kits and crampons.",

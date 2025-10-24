@@ -19,14 +19,13 @@ from bookings.services.guest_tokens import issue_guest_access_token
 from bookings.services.guests import upsert_guest_profile
 from bookings.services.payments import create_checkout_session
 from payments.models import Payment
-from .models import Trip, Assignment, PricingModel, TripTemplate
+from .models import Trip, Assignment, TripTemplate
 from .serializers import (
     TripSerializer,
     TripCreateSerializer,
     GuideSummarySerializer,
     TripTemplateSerializer,
 )
-from .serializers_pricing import PricingModelSerializer
 
 
 def _price_per_guest_cents(trip: Trip, party_size: int) -> int:
@@ -291,71 +290,12 @@ class TripViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class PricingModelViewSet(viewsets.ModelViewSet):
-    serializer_class = PricingModelSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        queryset = (
-            PricingModel.objects.select_related('service')
-            .prefetch_related('tiers')
-            .order_by('name')
-        )
-        user = self.request.user
-        service_id = self.request.query_params.get('service')
-
-        if user.is_superuser:
-            if service_id:
-                return queryset.filter(service_id=service_id)
-            return queryset
-
-        memberships = ServiceMembership.objects.filter(user=user, is_active=True)
-        if not memberships.exists():
-            return queryset.none()
-
-        service_ids = memberships.values_list('guide_service_id', flat=True)
-        queryset = queryset.filter(service_id__in=service_ids)
-        if service_id:
-            queryset = queryset.filter(service_id=service_id)
-        return queryset
-
-    def _ensure_can_manage(self, service_id: int):
-        user = self.request.user
-        if user.is_superuser:
-            return
-        allowed = ServiceMembership.objects.filter(
-            user=user,
-            guide_service_id=service_id,
-            role__in=[ServiceMembership.OWNER, ServiceMembership.MANAGER],
-            is_active=True,
-        ).exists()
-        if not allowed:
-            raise PermissionDenied("Not permitted to manage pricing for this service.")
-
-    def perform_create(self, serializer):
-        service = serializer.validated_data['service']
-        self._ensure_can_manage(service.id)
-        serializer.save(created_by=self.request.user)
-
-    def perform_update(self, serializer):
-        instance = serializer.instance
-        service = serializer.validated_data.get('service', instance.service)
-        if service != instance.service:
-            raise PermissionDenied("Cannot move pricing models between services.")
-        self._ensure_can_manage(instance.service_id)
-        serializer.save()
-
-    def perform_destroy(self, instance):
-        self._ensure_can_manage(instance.service_id)
-        instance.delete()
-
-
 class TripTemplateViewSet(viewsets.ModelViewSet):
     serializer_class = TripTemplateSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        queryset = TripTemplate.objects.select_related('service', 'pricing_model').order_by('title')
+        queryset = TripTemplate.objects.select_related('service').order_by('title')
         user = self.request.user
         service_id = self.request.query_params.get('service')
 
@@ -409,3 +349,40 @@ class TripTemplateViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         self._ensure_can_manage(instance.service_id)
         instance.delete()
+
+    @action(detail=True, methods=["post"], url_path="duplicate")
+    def duplicate(self, request, pk=None):
+        template = self.get_object()
+        self._ensure_can_manage(template.service_id)
+
+        new_title = self._generate_copy_title(template)
+        duplicate = TripTemplate.objects.create(
+            service=template.service,
+            title=new_title,
+            duration_hours=template.duration_hours,
+            location=template.location,
+            pricing_currency=template.pricing_currency,
+            is_deposit_required=template.is_deposit_required,
+            deposit_percent=template.deposit_percent,
+            pricing_tiers=template.pricing_tiers,
+            target_client_count=template.target_client_count,
+            target_guide_count=template.target_guide_count,
+            notes=template.notes,
+            is_active=False,
+            created_by=request.user,
+        )
+
+        serializer = self.get_serializer(duplicate)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def _generate_copy_title(self, template: TripTemplate) -> str:
+        base = template.title
+        suffix = " (Copy)"
+        new_title = f"{base}{suffix}"
+        existing = TripTemplate.objects.filter(service=template.service, title=new_title)
+        counter = 2
+        while existing.exists():
+            new_title = f"{base} (Copy {counter})"
+            existing = TripTemplate.objects.filter(service=template.service, title=new_title)
+            counter += 1
+        return new_title

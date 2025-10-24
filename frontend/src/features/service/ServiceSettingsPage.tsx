@@ -6,7 +6,6 @@ import {
   fetchMemberships,
   ServiceMembership
 } from '../profile/api'
-import ServicePricingCard from './ServicePricingCard'
 import ServiceBrandingCard from '../profile/ServiceBrandingCard'
 import ServiceStripeCard from './ServiceStripeCard'
 import ServiceTemplatesCard from './ServiceTemplatesCard'
@@ -60,7 +59,6 @@ export default function ServiceSettingsPage(){
           <div key={membership.id} className="space-y-6">
             <ServiceStripeCard membership={membership} />
             <ServiceBrandingCard membership={membership} />
-            <ServicePricingCard membership={membership} />
             <ServiceTemplatesCard membership={membership} />
           </div>
         ))}

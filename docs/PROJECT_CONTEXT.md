@@ -97,7 +97,7 @@ Users can belong to multiple guide services with different roles.
 - `guide_service` (FK)
 - `title`, `location`, `start`, `end`, `price_cents`, `difficulty`, `description`
 - Optional planning metadata: `duration_hours`, target client/guide counts, staff notes
-- Pricing metadata: optional `pricing_model` FK plus `pricing_snapshot` storing tiers/deposits used at creation
+- Pricing metadata: snapshot (currency, deposit, tier prices) pulled from the template at creation time
 - Template provenance: optional `template_used` FK with corresponding `template_snapshot`
 
 ### Assignment

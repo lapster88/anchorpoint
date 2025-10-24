@@ -1,10 +1,8 @@
-from decimal import Decimal
-
 from rest_framework import serializers
 
 from accounts.models import ServiceMembership, User
 from bookings.serializers import BookingCreateSerializer, TripPartySerializer
-from .models import Trip, Assignment, TripTemplate, PricingModel
+from .models import Trip, Assignment, TripTemplate
 
 
 class TripSerializer(serializers.ModelSerializer):
@@ -12,7 +10,6 @@ class TripSerializer(serializers.ModelSerializer):
     guide_service_name = serializers.CharField(source="guide_service.name", read_only=True)
     assignments = serializers.SerializerMethodField()
     requires_assignment = serializers.SerializerMethodField()
-    pricing_model_name = serializers.CharField(source="pricing_model.name", read_only=True)
     template_id = serializers.IntegerField(source="template_used_id", read_only=True)
 
     class Meta:
@@ -32,8 +29,6 @@ class TripSerializer(serializers.ModelSerializer):
              "target_client_count",
              "target_guide_count",
              "notes",
-             "pricing_model",
-             "pricing_model_name",
              "pricing_snapshot",
              "template_id",
              "template_snapshot",
@@ -44,14 +39,12 @@ class TripSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "pricing_snapshot",
             "template_snapshot",
-            "pricing_model_name",
             "template_id",
         ]
         extra_kwargs = {
             "title": {"required": False},
             "location": {"required": False},
             "price_cents": {"required": False},
-            "pricing_model": {"required": False, "allow_null": True},
         }
 
     def get_assignments(self, obj: Trip):
@@ -82,11 +75,6 @@ class TripCreateSerializer(TripSerializer):
         allow_null=True,
         write_only=True,
     )
-    pricing_model = serializers.PrimaryKeyRelatedField(
-        queryset=PricingModel.objects.all(),
-        required=False,
-        allow_null=True,
-    )
 
     class Meta(TripSerializer.Meta):
         fields = TripSerializer.Meta.fields + ["party", "guides", "template"]
@@ -109,14 +97,10 @@ class TripCreateSerializer(TripSerializer):
             validated_data.setdefault("target_guide_count", template.target_guide_count)
             if not validated_data.get("notes"):
                 validated_data["notes"] = template.notes
-            if not validated_data.get("pricing_model"):
-                validated_data["pricing_model"] = template.pricing_model
-
-        pricing_model = validated_data.get("pricing_model")
-        if pricing_model is not None:
-            snapshot = pricing_model.to_snapshot()
-            validated_data["pricing_snapshot"] = snapshot
-            base_price = _snapshot_base_price_cents(snapshot)
+            snapshot = template.to_snapshot()
+            pricing_snapshot = snapshot.get("pricing")
+            validated_data["pricing_snapshot"] = pricing_snapshot
+            base_price = _snapshot_base_price_cents(pricing_snapshot)
             if base_price is not None:
                 validated_data["price_cents"] = base_price
 
@@ -137,18 +121,14 @@ class TripCreateSerializer(TripSerializer):
         guides = attrs.get("guides") or []
         service = attrs.get("guide_service")
         template = attrs.get("template")
-        pricing_model = attrs.get("pricing_model")
 
         if template and service and template.service_id != service.id:
             raise serializers.ValidationError({"template": "Template must belong to the same guide service."})
         if template and not template.is_active:
             raise serializers.ValidationError({"template": "Template is no longer active."})
-        resolved_pricing_model = pricing_model or (template.pricing_model if template else None)
-        if resolved_pricing_model and service and resolved_pricing_model.service_id != service.id:
-            raise serializers.ValidationError({"pricing_model": "Pricing model must belong to the same guide service."})
         price_cents = attrs.get("price_cents")
-        if resolved_pricing_model is None and price_cents in (None, "", 0):
-            raise serializers.ValidationError({"price_cents": "Price per guest is required when no pricing model is selected."})
+        if template is None and price_cents in (None, "", 0):
+            raise serializers.ValidationError({"price_cents": "Price per guest is required when no template pricing is selected."})
         if not template:
             if not attrs.get("title"):
                 raise serializers.ValidationError({"title": "This field is required."})
@@ -181,7 +161,8 @@ class GuideSummarySerializer(serializers.ModelSerializer):
 
 
 class TripTemplateSerializer(serializers.ModelSerializer):
-    pricing_model_name = serializers.CharField(source="pricing_model.name", read_only=True)
+    pricing_tiers = serializers.ListField(child=serializers.DictField(), allow_empty=False)
+    deposit_percent = serializers.DecimalField(max_digits=5, decimal_places=2, default=0)
 
     class Meta:
         model = TripTemplate
@@ -191,8 +172,10 @@ class TripTemplateSerializer(serializers.ModelSerializer):
             "title",
             "duration_hours",
             "location",
-            "pricing_model",
-            "pricing_model_name",
+            "pricing_currency",
+            "is_deposit_required",
+            "deposit_percent",
+            "pricing_tiers",
             "target_client_count",
             "target_guide_count",
             "notes",
@@ -200,18 +183,50 @@ class TripTemplateSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "pricing_model_name"]
+        read_only_fields = ["id", "created_at", "updated_at"]
 
     def validate(self, attrs):
-        service = attrs.get("service") or getattr(self.instance, "service", None)
-        pricing_model = attrs.get("pricing_model") or getattr(self.instance, "pricing_model", None)
-        if service and pricing_model and pricing_model.service_id != service.id:
-            raise serializers.ValidationError({"pricing_model": "Pricing model must belong to the same guide service."})
+        tiers = attrs.get("pricing_tiers") or getattr(self.instance, "pricing_tiers", [])
+        if not tiers:
+            raise serializers.ValidationError({"pricing_tiers": "At least one tier is required."})
+
+        # Ensure tiers are contiguous, start at 1, and final tier open-ended
+        sorted_tiers = sorted(tiers, key=lambda t: t.get("min_guests") or 0)
+        last_max = 0
+        for index, tier in enumerate(sorted_tiers):
+            min_guests = tier.get("min_guests")
+            max_guests = tier.get("max_guests")
+            price = tier.get("price_per_guest")
+            if min_guests is None or min_guests < 1:
+                raise serializers.ValidationError({"pricing_tiers": f"Tier {index + 1}: min_guests must be at least 1."})
+            if max_guests is not None and max_guests < min_guests:
+                raise serializers.ValidationError({"pricing_tiers": f"Tier {index + 1}: max_guests must be >= min_guests."})
+            if last_max == 0 and min_guests != 1:
+                raise serializers.ValidationError({"pricing_tiers": "Tiers must start at 1 guest."})
+            if last_max and min_guests != last_max + 1:
+                raise serializers.ValidationError({"pricing_tiers": "Tiers must be contiguous without gaps."})
+            try:
+                float(price)
+            except (TypeError, ValueError):
+                raise serializers.ValidationError({"pricing_tiers": f"Tier {index + 1}: price_per_guest must be numeric."})
+            last_max = max_guests if max_guests is not None else min_guests
+
+        if sorted_tiers[-1].get("max_guests") is not None:
+            raise serializers.ValidationError({"pricing_tiers": "Final tier must leave max_guests blank for open-ended ranges."})
+
+        deposit = attrs.get("deposit_percent")
+        if deposit is not None:
+            if deposit < 0 or deposit > 100:
+                raise serializers.ValidationError({"deposit_percent": "Deposit percent must be between 0 and 100."})
+            if attrs.get("is_deposit_required") and deposit == 0:
+                raise serializers.ValidationError({"deposit_percent": "Deposit percent must be greater than 0 when a deposit is required."})
         return attrs
 
 
 def _snapshot_base_price_cents(snapshot: dict) -> int | None:
-    tiers = snapshot.get("tiers") if snapshot else None
+    if not snapshot:
+        return None
+    tiers = snapshot.get("tiers")
     if not tiers:
         return None
     first = tiers[0]
@@ -222,7 +237,6 @@ def _snapshot_base_price_cents(snapshot: dict) -> int | None:
     if price is None:
         return None
     try:
-        amount = Decimal(str(price))
-    except Exception:  # pragma: no cover - defensive
+        return int(round(float(price) * 100))
+    except (TypeError, ValueError):
         return None
-    return int((amount * 100).quantize(Decimal("1")))

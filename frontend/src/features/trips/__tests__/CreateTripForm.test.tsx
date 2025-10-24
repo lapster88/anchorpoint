@@ -8,23 +8,17 @@ import CreateTripForm from '../CreateTripForm'
 const {
   createTrip,
   listServiceGuides,
-  listServiceTripTemplates,
-  listPricingModels
+  listServiceTripTemplates
 } = vi.hoisted(() => ({
   createTrip: vi.fn(),
   listServiceGuides: vi.fn(),
-  listServiceTripTemplates: vi.fn(),
-  listPricingModels: vi.fn()
+  listServiceTripTemplates: vi.fn()
 }))
 
 vi.mock('../api', () => ({
   createTrip,
   listServiceGuides,
   listServiceTripTemplates,
-}))
-
-vi.mock('../../service/api', () => ({
-  listPricingModels,
 }))
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -47,7 +41,6 @@ describe('CreateTripForm', () => {
     queryClient.clear()
     listServiceGuides.mockResolvedValue([])
     listServiceTripTemplates.mockResolvedValue([])
-    listPricingModels.mockResolvedValue([])
     createTrip.mockResolvedValue({
       id: 99,
       guide_service: 1,
@@ -59,7 +52,12 @@ describe('CreateTripForm', () => {
       price_cents: 15000,
       difficulty: null,
       description: '',
-      pricing_model: null,
+      pricing_snapshot: {
+        currency: 'usd',
+        is_deposit_required: false,
+        deposit_percent: '0',
+        tiers: []
+      },
       template_id: null,
       parties: [],
       assignments: [],
@@ -141,7 +139,7 @@ describe('CreateTripForm', () => {
     expect(payload.duration_hours).toBe(9)
     expect(payload.target_client_count).toBe(6)
     expect(payload.target_guide_count).toBe(2)
-    expect(payload.pricing_model).toBeUndefined()
+    // pricing driven by manual entry in this scenario, template not used
     expect(payload.party.primary_guest.email).toBe('guest@example.com')
     expect(payload.party.additional_guests?.[0].email).toBe('friend@example.com')
     expect(payload.party.party_size).toBe(4)
@@ -149,7 +147,7 @@ describe('CreateTripForm', () => {
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ id: 99 })))
   })
 
-  it('submits payload using a trip template and pricing model snapshot', async () => {
+  it('submits payload using a trip template and pricing snapshot', async () => {
     listServiceTripTemplates.mockResolvedValue([
       {
         id: 55,
@@ -157,30 +155,17 @@ describe('CreateTripForm', () => {
         title: 'Glacier Skills',
         duration_hours: 8,
         location: 'Mount Baker',
-        pricing_model: 77,
-        pricing_model_name: 'Standard',
+        pricing_currency: 'usd',
+        is_deposit_required: true,
+        deposit_percent: '25.00',
+        pricing_tiers: [
+          { min_guests: 1, max_guests: 4, price_per_guest: '150.00' },
+          { min_guests: 5, max_guests: null, price_per_guest: '130.00' }
+        ],
         target_client_count: 6,
         target_guide_count: 2,
         notes: 'Bring crampons',
         is_active: true
-      }
-    ])
-    listPricingModels.mockResolvedValue([
-      {
-        id: 77,
-        service: 1,
-        name: 'Standard',
-        description: '',
-        default_location: '',
-        currency: 'usd',
-        is_deposit_required: true,
-        deposit_percent: '25.00',
-        tiers: [
-          { id: 1, min_guests: 1, max_guests: 4, price_per_guest: '150.00' },
-          { id: 2, min_guests: 5, max_guests: null, price_per_guest: '130.00' }
-        ],
-        created_at: '',
-        updated_at: ''
       }
     ])
 
@@ -199,7 +184,7 @@ describe('CreateTripForm', () => {
     const payload = createTrip.mock.calls[0][0]
 
     expect(payload.template).toBe(55)
-    expect(payload.pricing_model).toBe(77)
+    expect(payload.price_cents).toBeUndefined()
     expect(payload.price_cents).toBeUndefined()
     expect(payload.duration_hours).toBe(8)
     expect(payload.target_client_count).toBe(6)

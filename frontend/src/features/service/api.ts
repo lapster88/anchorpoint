@@ -1,45 +1,19 @@
 import { api } from '../../lib/api'
 
-export type PricingTier = {
-  id?: number
-  min_guests: number
-  max_guests: number | null
-  price_per_guest: string
-}
-
-export type PricingModel = {
-  id: number
-  service: number
-  name: string
-  description: string
-  default_location: string
-  currency: string
-  is_deposit_required: boolean
-  deposit_percent: string
-  tiers: PricingTier[]
-  created_at: string
-  updated_at: string
-}
-
-export type PricingModelPayload = {
-  service: number
-  name: string
-  description?: string
-  default_location?: string
-  currency: string
-  is_deposit_required: boolean
-  deposit_percent: string
-  tiers: PricingTier[]
-}
-
 export type TripTemplate = {
   id: number
   service: number
   title: string
   duration_hours: number
   location: string
-  pricing_model: number
-  pricing_model_name: string
+  pricing_currency: string
+  is_deposit_required: boolean
+  deposit_percent: string
+  pricing_tiers: Array<{
+    min_guests: number
+    max_guests: number | null
+    price_per_guest: string
+  }>
   target_client_count: number
   target_guide_count: number
   notes: string
@@ -53,35 +27,14 @@ export type TripTemplatePayload = {
   title: string
   duration_hours: number
   location: string
-  pricing_model: number
+  pricing_currency: string
+  is_deposit_required: boolean
+  deposit_percent: string
+  pricing_tiers: TripTemplate['pricing_tiers']
   target_client_count: number
   target_guide_count: number
   notes?: string
   is_active: boolean
-}
-
-export const listPricingModels = async (serviceId: number): Promise<PricingModel[]> => {
-  const { data } = await api.get<PricingModel[]>('/api/pricing-models/', {
-    params: { service: serviceId }
-  })
-  return data
-}
-
-export const createPricingModel = async (payload: PricingModelPayload): Promise<PricingModel> => {
-  const { data } = await api.post<PricingModel>('/api/pricing-models/', payload)
-  return data
-}
-
-export const updatePricingModel = async (
-  id: number,
-  payload: PricingModelPayload
-): Promise<PricingModel> => {
-  const { data } = await api.put<PricingModel>(`/api/pricing-models/${id}/`, payload)
-  return data
-}
-
-export const deletePricingModel = async (id: number): Promise<void> => {
-  await api.delete(`/api/pricing-models/${id}/`)
 }
 
 export const listTripTemplates = async (serviceId: number): Promise<TripTemplate[]> => {
@@ -106,6 +59,11 @@ export const updateTripTemplate = async (
 
 export const deleteTripTemplate = async (id: number): Promise<void> => {
   await api.delete(`/api/trip-templates/${id}/`)
+}
+
+export const duplicateTripTemplate = async (id: number): Promise<TripTemplate> => {
+  const { data } = await api.post<TripTemplate>(`/api/trip-templates/${id}/duplicate/`)
+  return data
 }
 
 export type ServiceUser = {

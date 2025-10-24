@@ -18,19 +18,11 @@ Users need to be able to create and manage trip templates. Trip templates need t
 - Template title
 - Duration
 - Location
-- Pricing Model (can default based on location)
+- Tiered pricing (currency, optional deposit percent, contiguous per-guest tiers with an open-ended final tier)
 - Target client to guide ratio
 
 Trip templates will then be used in the trip creation form to make trip creation easier. trip creation will also support
-a "no template" custom trip as well
-
-### Pricing
-Users need to be able to set up pricing models that are used for each trip. Pricing models have the following
-properties:
-- Price per guest for a number of guests 
-- Deposit required?
-- Deposit amount (if required)
-- Location (optional, for automatic use on trips)
+a "no template" custom trip as well. Staff should be able to duplicate an existing template to speed up seasonal or private variants; duplicates automatically append a suffix to the title so they are easy to distinguish.
 
 ### Guide Roster
 Users need to be able to view their guide roster. They need to be able to mark guides as active/inactive for their

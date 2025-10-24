@@ -27,11 +27,6 @@ vi.mock('../ServiceStripeCard', () => ({
   default: ({ membership }: { membership: any }) => <div>Stripe {membership.guide_service_name}</div>,
 }))
 
-vi.mock('../ServicePricingCard', () => ({
-  __esModule: true,
-  default: ({ membership }: { membership: any }) => <div>Pricing {membership.guide_service_name}</div>,
-}))
-
 vi.mock('../ServiceTemplatesCard', () => ({
   __esModule: true,
   default: ({ membership }: { membership: any }) => <div>Templates {membership.guide_service_name}</div>,
@@ -74,10 +69,8 @@ describe('ServiceSettingsPage', () => {
 
     expect(await screen.findByText(/Stripe Summit Guides/)).toBeInTheDocument()
     expect(screen.getByText(/Branding Summit Guides/)).toBeInTheDocument()
-    expect(screen.getByText(/Pricing Summit Guides/)).toBeInTheDocument()
     expect(screen.getByText(/Templates Summit Guides/)).toBeInTheDocument()
     expect(screen.getByText(/Stripe Alpine Works/)).toBeInTheDocument()
-    expect(screen.getByText(/Pricing Alpine Works/)).toBeInTheDocument()
     expect(screen.getByText(/Templates Alpine Works/)).toBeInTheDocument()
     expect(screen.queryByText(/Stripe Desert Adventures/)).not.toBeInTheDocument()
   })

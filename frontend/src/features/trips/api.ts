@@ -21,8 +21,17 @@ export type TripDetail = {
   parties: TripPartySummary[]
   assignments: TripAssignment[]
   requires_assignment: boolean
-  pricing_model?: number | null
-  pricing_snapshot?: unknown
+  pricing_snapshot?: {
+    currency: string
+    is_deposit_required: boolean
+    deposit_percent: string
+    tiers: Array<{
+      min_guests: number
+      max_guests: number | null
+      price_per_guest: string | null
+      price_per_guest_cents: number | null
+    }>
+  } | null
   template_id?: number | null
 }
 
@@ -39,7 +48,6 @@ export type CreateTripPayload = {
   target_client_count?: number
   target_guide_count?: number
   notes?: string
-  pricing_model?: number | null
   template?: number | null
   guides?: number[]
   party: CreatePartyPayload
@@ -56,8 +64,14 @@ export type TripTemplateOption = {
   title: string
   duration_hours: number
   location: string
-  pricing_model: number
-  pricing_model_name: string
+  pricing_currency: string
+  is_deposit_required: boolean
+  deposit_percent: string
+  pricing_tiers: Array<{
+    min_guests: number
+    max_guests: number | null
+    price_per_guest: string
+  }>
   target_client_count: number
   target_guide_count: number
   notes: string

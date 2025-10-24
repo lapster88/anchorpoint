@@ -59,5 +59,5 @@
 - **Guide Assignment Editing**: Owners/managers can reassign the lead guide inside the trip management panel; guides see a read-only summary of their trips.
 - **Stripe & Notifications**: Implement payment intents through stub interfaces that can switch to live Stripe later. Email sending should support per-guide-service identities (e.g., “XYZ Guides via Anchorpoint”) and remain pluggable for future providers.
 - **Devseed Consistency**: `manage.py devseed` must create deterministic accounts/passwords (listed above) each run; document new fixtures here if they are added.
-- **Service Templates & Pricing**: Managers can manage trip templates alongside pricing models. Trip creation now supports selecting a template, which snaps the associated pricing tiers and default duration/ratio into the booking payload.
+- **Service Templates**: Managers maintain trip templates with embedded pricing tiers; duplication makes seasonal variants easy. Trip creation snaps the template pricing/metadata into the new trip payload.
 - **Service Roster**: Owners/managers can invite staff across all roles, manage pending invites, and toggle member activity from `/service-roster`. Invitation acceptance handles new-user registration or authenticated joins.

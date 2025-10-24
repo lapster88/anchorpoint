@@ -31,7 +31,7 @@ from orgs.api import (
     StripeOnboardingLinkView,
     StripeWebhookView,
 )
-from trips.api import TripViewSet, PricingModelViewSet, TripTemplateViewSet
+from trips.api import TripViewSet, TripTemplateViewSet
 
 router = DefaultRouter()
 router.register(r"trips", TripViewSet, basename="trip")
@@ -46,7 +46,6 @@ router.register(
     basename="auth-calendar-integrations",
 )
 router.register(r"guests", GuestProfileViewSet, basename="guest")
-router.register(r"pricing-models", PricingModelViewSet, basename="pricing-model")
 router.register(r"trip-templates", TripTemplateViewSet, basename="trip-template")
 
 urlpatterns = [
