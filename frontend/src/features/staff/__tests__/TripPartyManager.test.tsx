@@ -74,7 +74,6 @@ describe('TripPartyManager', () => {
       location: 'Mt. Baker',
       start: trip.start,
       end: trip.end,
-      capacity: 6,
       price_cents: trip.price_cents,
       difficulty: null,
       description: '',

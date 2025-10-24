@@ -19,9 +19,32 @@ from bookings.services.guest_tokens import issue_guest_access_token
 from bookings.services.guests import upsert_guest_profile
 from bookings.services.payments import create_checkout_session
 from payments.models import Payment
-from .models import Trip, Assignment, PricingModel
-from .serializers import TripSerializer, TripCreateSerializer, GuideSummarySerializer
+from .models import Trip, Assignment, PricingModel, TripTemplate
+from .serializers import (
+    TripSerializer,
+    TripCreateSerializer,
+    GuideSummarySerializer,
+    TripTemplateSerializer,
+)
 from .serializers_pricing import PricingModelSerializer
+
+
+def _price_per_guest_cents(trip: Trip, party_size: int) -> int:
+    snapshot = trip.pricing_snapshot or {}
+    tiers = snapshot.get("tiers") or []
+    if tiers:
+        for tier in tiers:
+            max_guests = tier.get("max_guests")
+            if max_guests is None or party_size <= max_guests:
+                return tier.get("price_per_guest_cents") or trip.price_cents
+        # Fallback to last tier if none matched due to data issues
+        return tiers[-1].get("price_per_guest_cents") or trip.price_cents
+    return trip.price_cents
+
+
+def _calculate_amount_cents(trip: Trip, party_size: int) -> int:
+    per_guest = _price_per_guest_cents(trip, party_size)
+    return per_guest * party_size
 
 
 class TripViewSet(viewsets.ModelViewSet):
@@ -84,15 +107,6 @@ class TripViewSet(viewsets.ModelViewSet):
         requested_party_size = payload.get("party_size") or len(guests)
         party_size = max(requested_party_size, len(guests))
 
-        total_reserved = (
-            Booking.objects.filter(trip=trip)
-            .aggregate(total=Sum("party_size"))
-            .get("total")
-            or 0
-        )
-        if total_reserved + party_size > trip.capacity:
-            raise ValueError("capacity exceeded")
-
         booking = Booking.objects.create(
             trip=trip,
             primary_guest=primary_guest,
@@ -105,7 +119,7 @@ class TripViewSet(viewsets.ModelViewSet):
         for guest in additional_guests:
             BookingGuest.objects.get_or_create(booking=booking, guest=guest, defaults={"is_primary": False})
 
-        amount_cents = trip.price_cents * party_size
+        amount_cents = _calculate_amount_cents(trip, party_size)
         checkout_session = create_checkout_session(booking=booking, amount_cents=amount_cents)
 
         Payment.objects.create(
@@ -157,10 +171,7 @@ class TripViewSet(viewsets.ModelViewSet):
 
         serializer = BookingCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        try:
-            booking = self._create_party_instance(trip=trip, party_data=serializer.validated_data)
-        except ValueError:
-            return Response({"detail": "Trip capacity would be exceeded."}, status=status.HTTP_400_BAD_REQUEST)
+        booking = self._create_party_instance(trip=trip, party_data=serializer.validated_data)
 
         response_serializer = BookingResponseSerializer(booking)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
@@ -203,11 +214,7 @@ class TripViewSet(viewsets.ModelViewSet):
         party_serializer = BookingCreateSerializer(data=party_data)
         party_serializer.is_valid(raise_exception=True)
 
-        try:
-            booking = self._create_party_instance(trip=trip, party_data=party_serializer.validated_data)
-        except ValueError:
-            trip.delete()
-            return Response({"detail": "Trip capacity would be exceeded."}, status=status.HTTP_400_BAD_REQUEST)
+        booking = self._create_party_instance(trip=trip, party_data=party_serializer.validated_data)
 
         guides = serializer.context.get("guides", [])
         self._replace_assignments(trip, guides)
@@ -335,6 +342,67 @@ class PricingModelViewSet(viewsets.ModelViewSet):
         service = serializer.validated_data.get('service', instance.service)
         if service != instance.service:
             raise PermissionDenied("Cannot move pricing models between services.")
+        self._ensure_can_manage(instance.service_id)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._ensure_can_manage(instance.service_id)
+        instance.delete()
+
+
+class TripTemplateViewSet(viewsets.ModelViewSet):
+    serializer_class = TripTemplateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = TripTemplate.objects.select_related('service', 'pricing_model').order_by('title')
+        user = self.request.user
+        service_id = self.request.query_params.get('service')
+
+        if user.is_superuser:
+            if service_id:
+                return queryset.filter(service_id=service_id)
+            return queryset
+
+        memberships = ServiceMembership.objects.filter(user=user, is_active=True)
+        if not memberships.exists():
+            return queryset.none()
+
+        manageable_services = memberships.filter(
+            role__in=[ServiceMembership.OWNER, ServiceMembership.MANAGER]
+        ).values_list('guide_service_id', flat=True)
+
+        if not manageable_services:
+            return queryset.none()
+
+        queryset = queryset.filter(service_id__in=manageable_services)
+        if service_id:
+            queryset = queryset.filter(service_id=service_id)
+        return queryset
+
+    def _ensure_can_manage(self, service_id: int):
+        user = self.request.user
+        if user.is_superuser:
+            return
+        allowed = ServiceMembership.objects.filter(
+            user=user,
+            guide_service_id=service_id,
+            role__in=[ServiceMembership.OWNER, ServiceMembership.MANAGER],
+            is_active=True,
+        ).exists()
+        if not allowed:
+            raise PermissionDenied("Not permitted to manage templates for this service.")
+
+    def perform_create(self, serializer):
+        service = serializer.validated_data['service']
+        self._ensure_can_manage(service.id)
+        serializer.save(created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        new_service = serializer.validated_data.get('service', instance.service)
+        if new_service != instance.service:
+            raise PermissionDenied("Cannot move templates between services.")
         self._ensure_can_manage(instance.service_id)
         serializer.save()
 

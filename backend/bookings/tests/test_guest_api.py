@@ -37,7 +37,6 @@ def booking(db, service):
         location="Alps",
         start=timezone.now() + timezone.timedelta(days=5),
         end=timezone.now() + timezone.timedelta(days=6),
-        capacity=4,
         price_cents=50000,
     )
     booking = Booking.objects.create(trip=trip, primary_guest=guest, party_size=2)

@@ -25,7 +25,7 @@ from orgs.api import (
     StripeOnboardingLinkView,
     StripeWebhookView,
 )
-from trips.api import TripViewSet, PricingModelViewSet
+from trips.api import TripViewSet, PricingModelViewSet, TripTemplateViewSet
 
 router = DefaultRouter()
 router.register(r"trips", TripViewSet, basename="trip")
@@ -41,6 +41,7 @@ router.register(
 )
 router.register(r"guests", GuestProfileViewSet, basename="guest")
 router.register(r"pricing-models", PricingModelViewSet, basename="pricing-model")
+router.register(r"trip-templates", TripTemplateViewSet, basename="trip-template")
 
 urlpatterns = [
     path("admin/", admin.site.urls),

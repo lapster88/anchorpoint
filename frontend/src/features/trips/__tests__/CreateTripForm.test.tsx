@@ -5,14 +5,26 @@ import { vi } from 'vitest'
 
 import CreateTripForm from '../CreateTripForm'
 
-const { createTrip, listServiceGuides } = vi.hoisted(() => ({
+const {
+  createTrip,
+  listServiceGuides,
+  listServiceTripTemplates,
+  listPricingModels
+} = vi.hoisted(() => ({
   createTrip: vi.fn(),
   listServiceGuides: vi.fn(),
+  listServiceTripTemplates: vi.fn(),
+  listPricingModels: vi.fn()
 }))
 
 vi.mock('../api', () => ({
   createTrip,
   listServiceGuides,
+  listServiceTripTemplates,
+}))
+
+vi.mock('../../service/api', () => ({
+  listPricingModels,
 }))
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -34,6 +46,8 @@ describe('CreateTripForm', () => {
   beforeEach(() => {
     queryClient.clear()
     listServiceGuides.mockResolvedValue([])
+    listServiceTripTemplates.mockResolvedValue([])
+    listPricingModels.mockResolvedValue([])
     createTrip.mockResolvedValue({
       id: 99,
       guide_service: 1,
@@ -42,10 +56,11 @@ describe('CreateTripForm', () => {
       location: 'Mock Location',
       start: '2025-10-20T08:00:00Z',
       end: '2025-10-20T16:00:00Z',
-      capacity: 6,
       price_cents: 15000,
       difficulty: null,
       description: '',
+      pricing_model: null,
+      template_id: null,
       parties: [],
       assignments: [],
       requires_assignment: true,
@@ -67,10 +82,14 @@ describe('CreateTripForm', () => {
     renderForm()
 
     await waitFor(() => expect(listServiceGuides).toHaveBeenCalledWith(1))
+    await waitFor(() => expect(listServiceTripTemplates).toHaveBeenCalledWith(1))
 
     await userEvent.type(screen.getByLabelText('Location'), 'Mt. Baker')
     await userEvent.type(screen.getByLabelText('Start'), '2025-10-20T08:00')
     await userEvent.type(screen.getByLabelText('End'), '2025-10-20T16:00')
+    await userEvent.type(screen.getByLabelText('Duration (hours)'), '8')
+    await userEvent.type(screen.getByLabelText('Clients per trip'), '4')
+    await userEvent.type(screen.getByLabelText('Guides per trip'), '1')
     await userEvent.type(screen.getByLabelText('Price (USD)'), '0')
     await userEvent.type(screen.getByLabelText(/^Email/), 'guest@example.com')
 
@@ -89,12 +108,16 @@ describe('CreateTripForm', () => {
     renderForm({ onCreated })
 
     await waitFor(() => expect(listServiceGuides).toHaveBeenCalledWith(1))
+    await waitFor(() => expect(listServiceTripTemplates).toHaveBeenCalledWith(1))
 
     const guideCheckbox = await screen.findByLabelText('Gabe Guide')
     await userEvent.click(guideCheckbox)
     await userEvent.type(screen.getByLabelText('Location'), 'Mt. Baker')
     await userEvent.type(screen.getByLabelText('Start'), '2025-10-20T08:00')
     await userEvent.type(screen.getByLabelText('End'), '2025-10-20T16:00')
+    await userEvent.type(screen.getByLabelText('Duration (hours)'), '9')
+    await userEvent.type(screen.getByLabelText('Clients per trip'), '6')
+    await userEvent.type(screen.getByLabelText('Guides per trip'), '2')
     await userEvent.type(screen.getByLabelText('Price (USD)'), '150')
     await userEvent.type(screen.getByLabelText(/^Email/), 'guest@example.com')
     await userEvent.type(screen.getByLabelText('First name'), 'Greta')
@@ -115,10 +138,73 @@ describe('CreateTripForm', () => {
     expect(payload.guides).toEqual([10])
     expect(payload.location).toBe('Mt. Baker')
     expect(payload.price_cents).toBe(15000)
+    expect(payload.duration_hours).toBe(9)
+    expect(payload.target_client_count).toBe(6)
+    expect(payload.target_guide_count).toBe(2)
+    expect(payload.pricing_model).toBeUndefined()
     expect(payload.party.primary_guest.email).toBe('guest@example.com')
     expect(payload.party.additional_guests?.[0].email).toBe('friend@example.com')
     expect(payload.party.party_size).toBe(4)
 
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ id: 99 })))
+  })
+
+  it('submits payload using a trip template and pricing model snapshot', async () => {
+    listServiceTripTemplates.mockResolvedValue([
+      {
+        id: 55,
+        service: 1,
+        title: 'Glacier Skills',
+        duration_hours: 8,
+        location: 'Mount Baker',
+        pricing_model: 77,
+        pricing_model_name: 'Standard',
+        target_client_count: 6,
+        target_guide_count: 2,
+        notes: 'Bring crampons',
+        is_active: true
+      }
+    ])
+    listPricingModels.mockResolvedValue([
+      {
+        id: 77,
+        service: 1,
+        name: 'Standard',
+        description: '',
+        default_location: '',
+        currency: 'usd',
+        is_deposit_required: true,
+        deposit_percent: '25.00',
+        tiers: [
+          { id: 1, min_guests: 1, max_guests: 4, price_per_guest: '150.00' },
+          { id: 2, min_guests: 5, max_guests: null, price_per_guest: '130.00' }
+        ],
+        created_at: '',
+        updated_at: ''
+      }
+    ])
+
+    renderForm()
+
+    await waitFor(() => expect(listServiceTripTemplates).toHaveBeenCalledWith(1))
+
+    await userEvent.selectOptions(screen.getByLabelText('Template'), '55')
+    await userEvent.type(screen.getByLabelText('Start'), '2025-10-20T08:00')
+    await userEvent.type(screen.getByLabelText('End'), '2025-10-20T16:00')
+    await userEvent.type(screen.getByLabelText(/^Email/), 'guest@example.com')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create trip' }))
+
+    await waitFor(() => expect(createTrip).toHaveBeenCalledTimes(1))
+    const payload = createTrip.mock.calls[0][0]
+
+    expect(payload.template).toBe(55)
+    expect(payload.pricing_model).toBe(77)
+    expect(payload.price_cents).toBeUndefined()
+    expect(payload.duration_hours).toBe(8)
+    expect(payload.target_client_count).toBe(6)
+    expect(payload.target_guide_count).toBe(2)
+    expect(payload.notes).toBe('Bring crampons')
+    expect(payload.location).toBe('Mount Baker')
   })
 })

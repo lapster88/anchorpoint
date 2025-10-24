@@ -26,7 +26,6 @@ def trip(db):
         location="Mt. Baker",
         start=start,
         end=end,
-        capacity=6,
         price_cents=18000,
     )
 

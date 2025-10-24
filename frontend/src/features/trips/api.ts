@@ -15,31 +15,59 @@ export type TripDetail = {
   location: string
   start: string
   end: string
-  capacity: number
   price_cents: number
   difficulty: string | null
   description: string
   parties: TripPartySummary[]
   assignments: TripAssignment[]
   requires_assignment: boolean
+  pricing_model?: number | null
+  pricing_snapshot?: unknown
+  template_id?: number | null
 }
 
 export type CreateTripPayload = {
   guide_service: number
-  title: string
-  location: string
+  title?: string
+  location?: string
   start: string
   end: string
-  capacity: number
-  price_cents: number
+  price_cents?: number
   difficulty?: string | null
   description?: string
+  duration_hours?: number
+  target_client_count?: number
+  target_guide_count?: number
+  notes?: string
+  pricing_model?: number | null
+  template?: number | null
   guides?: number[]
   party: CreatePartyPayload
 }
 
 export async function createTrip(payload: CreateTripPayload): Promise<TripDetail> {
   const { data } = await api.post<TripDetail>('/api/trips/', payload)
+  return data
+}
+
+export type TripTemplateOption = {
+  id: number
+  service: number
+  title: string
+  duration_hours: number
+  location: string
+  pricing_model: number
+  pricing_model_name: string
+  target_client_count: number
+  target_guide_count: number
+  notes: string
+  is_active: boolean
+}
+
+export async function listServiceTripTemplates(serviceId: number): Promise<TripTemplateOption[]> {
+  const { data } = await api.get<TripTemplateOption[]>('/api/trip-templates/', {
+    params: { service: serviceId }
+  })
   return data
 }
 

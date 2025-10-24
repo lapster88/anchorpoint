@@ -32,7 +32,6 @@ def trip(db, guide_service):
         location="Alps",
         start=now + timezone.timedelta(days=5),
         end=now + timezone.timedelta(days=6),
-        capacity=4,
         price_cents=50000,
     )
 

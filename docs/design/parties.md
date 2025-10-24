@@ -56,7 +56,7 @@ GuideService ──< Trip ──< Party (Booking) ──< BookingGuest >── G
 
 ### Multiple parties per trip (corner case)
 - Default expectation is one party per trip/time slot. However, for private/off-menu scenarios, allow multiple parties:
-  - Enforce capacity checks (`sum(party_size)` cannot exceed trip `capacity`).
+  - Trips currently have no capacity constraint; staff should monitor party sizes manually.
   - Staff roster views must aggregate all party guests for the trip.
   - Payment/info/waiver readiness should aggregate across parties (all guests ready → trip ready).
 
@@ -139,7 +139,7 @@ erDiagram
   - Provide UI to manually resend links/notifications in the future.
 - **Multiple guests self-serve**: allow primary guest to add/remove party members in portal.
 - **Payment balance**: support deposits, late balance payments, and partial refunds.
-- **Trip capacity automation**: automatically prevent new parties once capacity reached.
+- **Optional capacity limits**: reintroduce per-trip caps with warnings when party counts exceed expected thresholds.
 - **Guide scheduling**: integrate with availability calendar to auto-suggest guides.
 - **Reporting**: export guest roster, waiver status, and payment summaries per trip.
 - **Staff notifications**: alerts/slack/email when guests finish info/waiver or when parties remain unstaffed.

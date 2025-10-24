@@ -68,7 +68,6 @@ const mockTripDetail = {
   location: 'Mt. Baker',
   start: '2025-10-20T08:00:00Z',
   end: '2025-10-21T08:00:00Z',
-  capacity: 6,
   price_cents: 15000,
   difficulty: null,
   description: '',

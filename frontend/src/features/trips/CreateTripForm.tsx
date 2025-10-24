@@ -1,7 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { createTrip, CreateTripPayload, TripDetail, listServiceGuides, GuideOption } from './api'
+import {
+  createTrip,
+  CreateTripPayload,
+  TripDetail,
+  listServiceGuides,
+  GuideOption,
+  listServiceTripTemplates,
+  TripTemplateOption
+} from './api'
+import { listPricingModels, PricingModel } from '../service/api'
 import { CreatePartyPayload } from '../staff/api'
 
 const emptyGuest = { email: '', first_name: '', last_name: '', phone: '' }
@@ -22,15 +31,34 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
   const [start, setStart] = useState('')
   const [end, setEnd] = useState('')
   const [price, setPrice] = useState('')
-  const [capacity, setCapacity] = useState(1)
   const [description, setDescription] = useState('')
+  const [durationHours, setDurationHours] = useState('')
+  const [targetClients, setTargetClients] = useState('')
+  const [targetGuides, setTargetGuides] = useState('')
+  const [notes, setNotes] = useState('')
   const [guides, setGuides] = useState<GuideOption[]>([])
   const [selectedGuideIds, setSelectedGuideIds] = useState<number[]>([])
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
+  const [selectedPricingModelId, setSelectedPricingModelId] = useState<string>('')
 
   const [primary, setPrimary] = useState<GuestForm>(emptyGuest)
   const [additionalGuests, setAdditionalGuests] = useState<GuestForm[]>([])
   const [partySize, setPartySize] = useState<number | ''>('')
   const [error, setError] = useState<string | null>(null)
+  const manualPriceRef = useRef<string>('')
+  const prevTemplateIdRef = useRef<string>('')
+
+  const templatesQuery = useQuery({
+    queryKey: ['trip-templates', serviceId],
+    queryFn: () => listServiceTripTemplates(serviceId!),
+    enabled: Boolean(serviceId)
+  })
+
+  const pricingModelsQuery = useQuery({
+    queryKey: ['pricing-models', serviceId],
+    queryFn: () => listPricingModels(serviceId!),
+    enabled: Boolean(serviceId)
+  })
 
   const mutation = useMutation({
     mutationFn: createTrip,
@@ -44,22 +72,41 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
     }
   })
 
+  const templates = templatesQuery.data ?? []
+  const pricingModels = pricingModelsQuery.data ?? []
+  const selectedTemplate = useMemo(
+    () => templates.find((template) => String(template.id) === selectedTemplateId),
+    [templates, selectedTemplateId]
+  )
+  const selectedPricingModel = useMemo(() => {
+    const id = selectedPricingModelId || (selectedTemplate ? String(selectedTemplate.pricing_model) : '')
+    if (!id) return undefined
+    return pricingModels.find((model) => String(model.id) === id)
+  }, [pricingModels, selectedPricingModelId, selectedTemplate])
+
+  const mutationInFlight = mutation.isLoading
+  const hasPricingModel = Boolean(selectedTemplate) || Boolean(selectedPricingModelId)
+  const priceInputDisabled = hasPricingModel
+
   const calculatedPartySize = useMemo(() => {
-    const base = 1 + additionalGuests.filter(guest => guest.email.trim()).length
+    const base = 1 + additionalGuests.filter((guest) => guest.email.trim()).length
     if (partySize === '') return base
     return Math.max(base, Number(partySize))
   }, [additionalGuests, partySize])
 
   const handlePrimaryChange = (field: keyof GuestForm) => (event: React.ChangeEvent<HTMLInputElement>) => {
-    setPrimary(prev => ({ ...prev, [field]: event.target.value }))
+    setPrimary((prev) => ({ ...prev, [field]: event.target.value }))
   }
 
   const handleAdditionalChange = (index: number, field: keyof GuestForm) => (event: React.ChangeEvent<HTMLInputElement>) => {
-    setAdditionalGuests(prev => prev.map((guest, i) => i === index ? { ...guest, [field]: event.target.value } : guest))
+    setAdditionalGuests((prev) =>
+      prev.map((guest, i) => (i === index ? { ...guest, [field]: event.target.value } : guest))
+    )
   }
 
-  const addAdditionalGuest = () => setAdditionalGuests(prev => [...prev, emptyGuest])
-  const removeAdditionalGuest = (index: number) => setAdditionalGuests(prev => prev.filter((_, i) => i !== index))
+  const addAdditionalGuest = () => setAdditionalGuests((prev) => [...prev, emptyGuest])
+  const removeAdditionalGuest = (index: number) =>
+    setAdditionalGuests((prev) => prev.filter((_, i) => i !== index))
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -77,23 +124,30 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
       setError('Primary guest email is required.')
       return
     }
+
     const priceNumber = Number(price)
-    if (Number.isNaN(priceNumber) || priceNumber <= 0) {
-      setError('Price must be greater than zero.')
-      return
+    if (!hasPricingModel) {
+      if (Number.isNaN(priceNumber) || priceNumber <= 0) {
+        setError('Price must be greater than zero.')
+        return
+      }
     }
 
     const extraGuests = additionalGuests
-      .filter(guest => guest.email.trim())
-      .map(guest => ({ ...guest }))
+      .filter((guest) => guest.email.trim())
+      .map((guest) => ({ ...guest }))
 
     const partyPayload: CreatePartyPayload = {
       primary_guest: { ...primary },
       additional_guests: extraGuests.length ? extraGuests : undefined,
-      party_size: typeof partySize === 'number' ? partySize : undefined,
+      party_size: typeof partySize === 'number' ? partySize : undefined
     }
 
-    const computedTitle = title.trim() || [primary.first_name, primary.last_name].filter(Boolean).join(' ').trim() || primary.email.trim() || 'Private Trip'
+    const computedTitle =
+      title.trim() ||
+      [primary.first_name, primary.last_name].filter(Boolean).join(' ').trim() ||
+      primary.email.trim() ||
+      'Private Trip'
 
     const payload: CreateTripPayload = {
       guide_service: serviceId,
@@ -101,11 +155,37 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
       location: location.trim(),
       start: new Date(start).toISOString(),
       end: new Date(end).toISOString(),
-      capacity,
-      price_cents: Math.round(priceNumber * 100),
-      description: description.trim(),
+      description: description.trim() || undefined,
       guides: selectedGuideIds,
-      party: partyPayload,
+      party: partyPayload
+    }
+
+    if (selectedTemplate) {
+      payload.template = selectedTemplate.id
+    }
+    if (selectedPricingModel) {
+      payload.pricing_model = selectedPricingModel.id
+    }
+    if (!selectedTemplate && durationHours.trim()) {
+      payload.duration_hours = Number(durationHours)
+    } else if (selectedTemplate) {
+      payload.duration_hours = selectedTemplate.duration_hours
+    }
+    if (!selectedTemplate && targetClients.trim()) {
+      payload.target_client_count = Number(targetClients)
+    } else if (selectedTemplate) {
+      payload.target_client_count = selectedTemplate.target_client_count
+    }
+    if (!selectedTemplate && targetGuides.trim()) {
+      payload.target_guide_count = Number(targetGuides)
+    } else if (selectedTemplate) {
+      payload.target_guide_count = selectedTemplate.target_guide_count
+    }
+    if (notes.trim()) {
+      payload.notes = notes.trim()
+    }
+    if (!hasPricingModel) {
+      payload.price_cents = Math.round(priceNumber * 100)
     }
 
     mutation.mutate(payload)
@@ -116,16 +196,24 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
     if (!serviceId) {
       setGuides([])
       setSelectedGuideIds([])
+        setSelectedTemplateId('')
+      setSelectedPricingModelId('')
+      setDurationHours('')
+      setTargetClients('')
+      setTargetGuides('')
+      setNotes('')
+      setPrice('')
+      manualPriceRef.current = ''
       return () => {
         active = false
       }
     }
 
     listServiceGuides(serviceId)
-      .then(data => {
+      .then((data) => {
         if (!active) return
         setGuides(data)
-        setSelectedGuideIds(prev => prev.filter(id => data.some(guide => guide.id === id)))
+        setSelectedGuideIds((prev) => prev.filter((id) => data.some((guide) => guide.id === id)))
       })
       .catch(() => {
         if (!active) return
@@ -138,77 +226,117 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
     }
   }, [serviceId])
 
+  useEffect(() => {
+    if (!selectedTemplate) {
+      if (prevTemplateIdRef.current) {
+        prevTemplateIdRef.current = ''
+      }
+      return
+    }
+    if (prevTemplateIdRef.current === selectedTemplateId) {
+      return
+    }
+    prevTemplateIdRef.current = selectedTemplateId
+    setTitle(selectedTemplate.title)
+    setLocation(selectedTemplate.location)
+    setDurationHours(String(selectedTemplate.duration_hours || ''))
+    setTargetClients(String(selectedTemplate.target_client_count || ''))
+    setTargetGuides(String(selectedTemplate.target_guide_count || ''))
+    setNotes(selectedTemplate.notes || '')
+    setSelectedPricingModelId(String(selectedTemplate.pricing_model))
+  }, [selectedTemplate, selectedTemplateId])
+
+  useEffect(() => {
+    if (!hasPricingModel) {
+      if (manualPriceRef.current && priceInputDisabled) {
+        setPrice(manualPriceRef.current)
+      }
+      return
+    }
+    if (selectedPricingModel && selectedPricingModel.tiers.length) {
+      const base = selectedPricingModel.tiers[0].price_per_guest
+      setPrice(String(base))
+    } else {
+      setPrice('')
+    }
+  }, [hasPricingModel, selectedPricingModel])
+
+  useEffect(() => {
+    if (!hasPricingModel) {
+      manualPriceRef.current = price
+    }
+  }, [hasPricingModel, price])
+
   if (!serviceId) {
     return (
-      <section className="border rounded-lg bg-white shadow-md p-6 space-y-4">
+      <section className="space-y-4 rounded-lg border bg-white p-6 shadow-md">
         <header className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Create trip</h2>
-          <button type="button" onClick={onClose} className="text-sm text-gray-600 underline">Close</button>
+          <button type="button" onClick={onClose} className="text-sm text-gray-600 underline">
+            Close
+          </button>
         </header>
-        <p className="text-sm text-gray-600">You don&apos;t have an active guide service selected. Switch services to create a trip.</p>
+        <p className="text-sm text-gray-600">
+          You don&apos;t have an active guide service selected. Switch services to create a trip.
+        </p>
       </section>
     )
   }
 
   return (
-    <section className="border rounded-lg bg-white shadow-md p-6 space-y-6">
+    <section className="space-y-6 rounded-lg border bg-white p-6 shadow-md">
       <header className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Create trip</h2>
-        <button type="button" onClick={onClose} className="text-sm text-gray-600 underline">Close</button>
+        <button type="button" onClick={onClose} className="text-sm text-gray-600 underline">
+          Close
+        </button>
       </header>
 
       <form className="space-y-6" onSubmit={handleSubmit}>
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid gap-4 md:grid-cols-2">
           <div>
             <p className="text-xs uppercase tracking-wide text-gray-500">Guide service</p>
-            <p className="text-sm text-gray-700 mt-1">{serviceName || 'Unavailable'}</p>
+            <p className="mt-1 text-sm text-gray-700">{serviceName || 'Unavailable'}</p>
           </div>
-          <label className="text-sm font-medium text-gray-700 block">
-            Capacity
-            <input
-              type="number"
-              min={1}
-              className="mt-1 w-full border rounded px-3 py-2"
-              value={capacity}
-              onChange={(event) => setCapacity(Number(event.target.value) || 1)}
-            />
-          </label>
         </div>
 
-        <div className="space-y-1">
-          <div>
-            <p className="text-sm font-medium text-gray-700">Assigned guides (optional)</p>
-            <div className="mt-2 space-y-2">
-              {guides.map((guide) => {
-                const name = guide.display_name || [guide.first_name, guide.last_name].filter(Boolean).join(' ').trim() || guide.email
-                const isChecked = selectedGuideIds.includes(guide.id)
-                return (
-                  <label key={guide.id} className="inline-flex items-center gap-2 text-sm text-gray-700">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4"
-                      checked={isChecked}
-                      onChange={(event) => {
-                        setSelectedGuideIds(prev =>
-                          event.target.checked
-                            ? [...prev, guide.id]
-                            : prev.filter(id => id !== guide.id)
-                        )
-                      }}
-                      disabled={!serviceId}
-                    />
-                    <span>{name}</span>
-                  </label>
-                )
-              })}
-            </div>
-          </div>
-          {serviceId && !guides.length && (
-            <p className="text-xs text-gray-500">No active guides are assigned to this service yet.</p>
+        <label className="block text-sm font-medium text-gray-700">
+          Template
+          <select
+            className="mt-1 w-full rounded border px-3 py-2"
+            value={selectedTemplateId}
+            onChange={(event) => {
+              const value = event.target.value
+              setSelectedTemplateId(value)
+              if (!value) {
+                setSelectedPricingModelId('')
+                setDurationHours('')
+                setTargetClients('')
+                setTargetGuides('')
+                setNotes('')
+              }
+            }}
+          >
+            <option value="">Custom trip</option>
+            {templates
+              .filter((template) => template.is_active)
+              .map((template) => (
+                <option key={template.id} value={String(template.id)}>
+                  {template.title}
+                </option>
+              ))}
+          </select>
+          {templatesQuery.isLoading && (
+            <span className="mt-1 block text-xs text-gray-500">Loading templates…</span>
           )}
-        </div>
+          {selectedTemplate && selectedTemplate.notes && (
+            <span className="mt-1 block text-xs text-gray-500">
+              Template notes: {selectedTemplate.notes}
+            </span>
+          )}
+        </label>
 
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid gap-4 md:grid-cols-2">
           <TextField
             label="Trip title (optional)"
             value={title}
@@ -218,12 +346,66 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
           <TextField label="Location" value={location} onChange={setLocation} required />
         </div>
 
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid gap-4 md:grid-cols-2">
           <DateTimeField label="Start" value={start} onChange={setStart} required />
           <DateTimeField label="End" value={end} onChange={setEnd} required />
         </div>
 
-        <label className="text-sm font-medium text-gray-700 block">
+        <div className="grid gap-4 md:grid-cols-3">
+          <TextField
+            label="Duration (hours)"
+            value={durationHours}
+            onChange={setDurationHours}
+            required={!selectedTemplate}
+            type="number"
+            min={1}
+          />
+          <TextField
+            label="Clients per trip"
+            value={targetClients}
+            onChange={setTargetClients}
+            required={!selectedTemplate}
+            type="number"
+            min={1}
+          />
+          <TextField
+            label="Guides per trip"
+            value={targetGuides}
+            onChange={setTargetGuides}
+            required={!selectedTemplate}
+            type="number"
+            min={1}
+          />
+        </div>
+
+        <label className="block text-sm font-medium text-gray-700">
+          Pricing model
+          <select
+            className="mt-1 w-full rounded border px-3 py-2"
+            value={selectedTemplate ? String(selectedTemplate.pricing_model) : selectedPricingModelId}
+            onChange={(event) => setSelectedPricingModelId(event.target.value)}
+            disabled={Boolean(selectedTemplate)}
+          >
+            <option value="">Manual price per guest</option>
+            {pricingModels.map((model) => (
+              <option key={model.id} value={String(model.id)}>
+                {model.name}
+              </option>
+            ))}
+          </select>
+          {pricingModelsQuery.isLoading && (
+            <span className="mt-1 block text-xs text-gray-500">Loading pricing models…</span>
+          )}
+        </label>
+
+        {selectedPricingModel && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <p className="font-medium text-slate-800">{selectedPricingModel.name}</p>
+            <PricingTiers tiers={selectedPricingModel.tiers} currency={selectedPricingModel.currency} />
+          </div>
+        )}
+
+        <label className="block text-sm font-medium text-gray-700">
           Price (USD)
           <input
             type="number"
@@ -231,48 +413,139 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
             step="0.01"
             value={price}
             onChange={(event) => setPrice(event.target.value)}
-            className="mt-1 w-full border rounded px-3 py-2"
-            required
+            className="mt-1 w-full rounded border px-3 py-2"
+            disabled={priceInputDisabled}
+            required={!hasPricingModel}
           />
+          {hasPricingModel && (
+            <span className="mt-1 block text-xs text-gray-500">
+              Pricing is based on the selected pricing model tiers.
+            </span>
+          )}
         </label>
 
-        <label className="text-sm font-medium text-gray-700 block">
+        <label className="block text-sm font-medium text-gray-700">
           Description
           <textarea
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             rows={3}
-            className="mt-1 w-full border rounded px-3 py-2"
+            className="mt-1 w-full rounded border px-3 py-2"
+          />
+        </label>
+
+        <label className="block text-sm font-medium text-gray-700">
+          Notes for guides (optional)
+          <textarea
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            rows={3}
+            className="mt-1 w-full rounded border px-3 py-2"
           />
         </label>
 
         <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-gray-700">Assigned guides (optional)</p>
+            {!guides.length && (
+              <span className="text-xs text-gray-500">No active guides for this service.</span>
+            )}
+          </div>
+          <div className="space-y-2">
+            {guides.map((guide) => {
+              const name =
+                guide.display_name ||
+                [guide.first_name, guide.last_name].filter(Boolean).join(' ').trim() ||
+                guide.email
+              const isChecked = selectedGuideIds.includes(guide.id)
+              return (
+                <label key={guide.id} className="inline-flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={isChecked}
+                    onChange={(event) => {
+                      setSelectedGuideIds((prev) =>
+                        event.target.checked ? [...prev, guide.id] : prev.filter((id) => id !== guide.id)
+                      )
+                    }}
+                  />
+                  <span>{name}</span>
+                </label>
+              )
+            })}
+          </div>
+        </section>
+
+        <section className="space-y-3">
           <h3 className="font-medium">Primary guest</h3>
-          <div className="grid md:grid-cols-2 gap-3">
-            <PartyTextField label="Email" required value={primary.email} onChange={handlePrimaryChange('email')} type="email" />
+          <div className="grid gap-3 md:grid-cols-2">
+            <PartyTextField
+              label="Email"
+              required
+              value={primary.email}
+              onChange={handlePrimaryChange('email')}
+              type="email"
+            />
             <PartyTextField label="Phone" value={primary.phone} onChange={handlePrimaryChange('phone')} />
-            <PartyTextField label="First name" value={primary.first_name} onChange={handlePrimaryChange('first_name')} />
-            <PartyTextField label="Last name" value={primary.last_name} onChange={handlePrimaryChange('last_name')} />
+            <PartyTextField
+              label="First name"
+              value={primary.first_name}
+              onChange={handlePrimaryChange('first_name')}
+            />
+            <PartyTextField
+              label="Last name"
+              value={primary.last_name}
+              onChange={handlePrimaryChange('last_name')}
+            />
           </div>
         </section>
 
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="font-medium">Additional guests</h3>
-            <button type="button" className="text-sm text-blue-600 underline" onClick={addAdditionalGuest}>Add guest</button>
+            <button type="button" className="text-sm text-blue-600 underline" onClick={addAdditionalGuest}>
+              Add guest
+            </button>
           </div>
-          {additionalGuests.length === 0 && <p className="text-sm text-gray-500">No additional guests yet.</p>}
+          {additionalGuests.length === 0 && (
+            <p className="text-sm text-gray-500">No additional guests yet.</p>
+          )}
           <div className="space-y-3">
             {additionalGuests.map((guest, index) => (
-              <div key={index} className="border rounded px-3 py-3">
-                <div className="grid md:grid-cols-2 gap-3">
-                  <PartyTextField label="Email" required value={guest.email} onChange={handleAdditionalChange(index, 'email')} type="email" />
-                  <PartyTextField label="Phone" value={guest.phone} onChange={handleAdditionalChange(index, 'phone')} />
-                  <PartyTextField label="First name" value={guest.first_name} onChange={handleAdditionalChange(index, 'first_name')} />
-                  <PartyTextField label="Last name" value={guest.last_name} onChange={handleAdditionalChange(index, 'last_name')} />
+              <div key={index} className="rounded border px-3 py-3">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <PartyTextField
+                    label="Email"
+                    required
+                    value={guest.email}
+                    onChange={handleAdditionalChange(index, 'email')}
+                    type="email"
+                  />
+                  <PartyTextField
+                    label="Phone"
+                    value={guest.phone}
+                    onChange={handleAdditionalChange(index, 'phone')}
+                  />
+                  <PartyTextField
+                    label="First name"
+                    value={guest.first_name}
+                    onChange={handleAdditionalChange(index, 'first_name')}
+                  />
+                  <PartyTextField
+                    label="Last name"
+                    value={guest.last_name}
+                    onChange={handleAdditionalChange(index, 'last_name')}
+                  />
                 </div>
-                <div className="text-right mt-2">
-                  <button type="button" className="text-xs text-red-600 underline" onClick={() => removeAdditionalGuest(index)}>Remove</button>
+                <div className="mt-2 text-right">
+                  <button
+                    type="button"
+                    className="text-xs text-red-600 underline"
+                    onClick={() => removeAdditionalGuest(index)}
+                  >
+                    Remove
+                  </button>
                 </div>
               </div>
             ))}
@@ -280,14 +553,14 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
         </section>
 
         <section className="space-y-2">
-          <label className="text-sm font-medium text-gray-700 block">
+          <label className="block text-sm font-medium text-gray-700">
             Party size
             <input
               type="number"
               min={1}
               value={partySize}
               onChange={(event) => setPartySize(event.target.value === '' ? '' : Number(event.target.value))}
-              className="mt-1 w-full border rounded px-3 py-2"
+              className="mt-1 w-full rounded border px-3 py-2"
             />
           </label>
           <p className="text-xs text-gray-500">Calculated minimum based on guests: {calculatedPartySize}</p>
@@ -295,8 +568,12 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
-        <button type="submit" disabled={mutation.isLoading} className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-70">
-          {mutation.isLoading ? 'Creating trip…' : 'Create trip'}
+        <button
+          type="submit"
+          disabled={mutationInFlight}
+          className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-70"
+        >
+          {mutationInFlight ? 'Creating trip…' : 'Create trip'}
         </button>
       </form>
     </section>
@@ -309,18 +586,22 @@ type TextFieldProps = {
   onChange: (value: string) => void
   required?: boolean
   placeholder?: string
+  type?: string
+  min?: number
 }
 
-function TextField({ label, value, onChange, required, placeholder }: TextFieldProps){
+function TextField({ label, value, onChange, required, placeholder, type = 'text', min }: TextFieldProps){
   return (
-    <label className="text-sm font-medium text-gray-700 block">
+    <label className="block text-sm font-medium text-gray-700">
       {label}
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         required={required}
         placeholder={placeholder}
-        className="mt-1 w-full border rounded px-3 py-2"
+        type={type}
+        min={min}
+        className="mt-1 w-full rounded border px-3 py-2"
       />
     </label>
   )
@@ -335,14 +616,14 @@ type DateTimeFieldProps = {
 
 function DateTimeField({ label, value, onChange, required }: DateTimeFieldProps){
   return (
-    <label className="text-sm font-medium text-gray-700 block">
+    <label className="block text-sm font-medium text-gray-700">
       {label}
       <input
         type="datetime-local"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         required={required}
-        className="mt-1 w-full border rounded px-3 py-2"
+        className="mt-1 w-full rounded border px-3 py-2"
       />
     </label>
   )
@@ -358,15 +639,61 @@ type PartyTextFieldProps = {
 
 function PartyTextField({ label, value, onChange, required, type = 'text' }: PartyTextFieldProps){
   return (
-    <label className="text-sm font-medium text-gray-700 block">
-      <span>{label}{required ? ' *' : ''}</span>
+    <label className="block text-sm font-medium text-gray-700">
+      <span>
+        {label}
+        {required ? ' *' : ''}
+      </span>
       <input
         type={type}
         value={value}
         onChange={onChange}
         required={required}
-        className="mt-1 w-full border rounded px-3 py-2"
+        className="mt-1 w-full rounded border px-3 py-2"
       />
     </label>
   )
+}
+
+type PricingTiersProps = {
+  tiers: PricingModel['tiers']
+  currency: string
+}
+
+function PricingTiers({ tiers, currency }: PricingTiersProps){
+  if (!tiers.length){
+    return <p className="text-xs text-slate-500">No tiers configured.</p>
+  }
+  return (
+    <dl className="mt-2 space-y-1">
+      {tiers.map((tier) => (
+        <div
+          key={tier.id ?? `${tier.min_guests}-${tier.max_guests ?? 'open'}`}
+          className="flex items-center justify-between rounded border border-slate-200 bg-white px-3 py-2"
+        >
+          <dt className="text-xs text-slate-500">
+            {tier.max_guests === null
+              ? `${tier.min_guests}+ guests`
+              : `${tier.min_guests} – ${tier.max_guests} guests`}
+          </dt>
+          <dd className="text-sm font-medium text-slate-800">
+            {formatCurrency(tier.price_per_guest, currency)} per guest
+          </dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+function formatCurrency(value: string, currency: string){
+  const amount = Number(value)
+  if (!Number.isFinite(amount)){
+    return value
+  }
+  return new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency: (currency || 'usd').toUpperCase(),
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount)
 }

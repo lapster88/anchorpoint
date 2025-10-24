@@ -10,7 +10,7 @@ from accounts.models import ServiceMembership, User
 from bookings.models import Booking, BookingGuest, GuestProfile
 from bookings.services.guest_tokens import issue_guest_access_token
 from orgs.models import GuideService
-from trips.models import Assignment, Trip, PricingModel, PricingTier
+from trips.models import Assignment, Trip, PricingModel, PricingTier, TripTemplate
 
 
 SEED_PASSWORD = "Anchorpoint123!"
@@ -111,9 +111,12 @@ class Command(BaseCommand):
                 location="Index, WA",
                 start=timezone.make_aware(datetime(2025, 10, 20, 8, 0), tz),
                 end=timezone.make_aware(datetime(2025, 10, 20, 16, 0), tz),
-                capacity=4,
                 price_cents=45000,
                 difficulty="Beginner",
+                duration_hours=8,
+                target_client_count=4,
+                target_guide_count=1,
+                notes="Full day trad fundamentals session.",
             )
             glacier_trip = self._create_trip(
                 guide_service=summit_service,
@@ -121,9 +124,12 @@ class Command(BaseCommand):
                 location="Mt. Baker, WA",
                 start=timezone.make_aware(datetime(2025, 10, 28, 6, 0), tz),
                 end=timezone.make_aware(datetime(2025, 10, 30, 18, 0), tz),
-                capacity=6,
                 price_cents=89000,
                 difficulty="Intermediate",
+                duration_hours=48,
+                target_client_count=6,
+                target_guide_count=2,
+                notes="Includes snow school and summit attempt.",
             )
             desert_trip = self._create_trip(
                 guide_service=desert_service,
@@ -131,9 +137,12 @@ class Command(BaseCommand):
                 location="Moab, UT",
                 start=timezone.make_aware(datetime(2025, 10, 24, 8, 0), tz),
                 end=timezone.make_aware(datetime(2025, 10, 25, 20, 0), tz),
-                capacity=2,
                 price_cents=72000,
                 difficulty="Advanced",
+                duration_hours=20,
+                target_client_count=2,
+                target_guide_count=1,
+                notes="Two-day tower objective with overnight camp.",
             )
 
             Assignment.objects.create(trip=trad_trip, guide=guide)
@@ -155,6 +164,21 @@ class Command(BaseCommand):
                 PricingTier(model=pricing_model, min_guests=1, max_guests=2, price_per_guest=150),
                 PricingTier(model=pricing_model, min_guests=3, max_guests=None, price_per_guest=120),
             ])
+
+            TripTemplate.objects.update_or_create(
+                service=summit_service,
+                title="Glacier Skills Day",
+                defaults={
+                    "duration_hours": 8,
+                    "location": "Mount Baker, WA",
+                    "pricing_model": pricing_model,
+                    "target_client_count": 6,
+                    "target_guide_count": 2,
+                    "notes": "Bring glacier kits and crampons.",
+                    "created_by": owner,
+                    "is_active": True,
+                },
+            )
 
             self.stdout.write(self.style.MIGRATE_HEADING("Creating manual availability and bookings"))
             GuideAvailability.objects.filter(
@@ -287,9 +311,12 @@ class Command(BaseCommand):
         location: str,
         start,
         end,
-        capacity: int,
         price_cents: int,
         difficulty: str,
+        duration_hours: int | None = None,
+        target_client_count: int | None = None,
+        target_guide_count: int | None = None,
+        notes: str = "",
     ) -> Trip:
         return Trip.objects.create(
             guide_service=guide_service,
@@ -297,10 +324,13 @@ class Command(BaseCommand):
             location=location,
             start=start,
             end=end,
-            capacity=capacity,
             price_cents=price_cents,
             difficulty=difficulty,
             description=f"Sample itinerary for {title}.",
+            duration_hours=duration_hours,
+            target_client_count=target_client_count,
+            target_guide_count=target_guide_count,
+            notes=notes,
         )
 
     def _ensure_superuser(self) -> User:

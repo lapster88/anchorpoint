@@ -36,7 +36,6 @@ def trip(db, service):
         location="Rainier",
         start=timezone.now() + timezone.timedelta(days=10),
         end=timezone.now() + timezone.timedelta(days=12),
-        capacity=6,
         price_cents=20000,
     )
 
@@ -165,7 +164,6 @@ def test_create_trip_with_party(monkeypatch, owner, service):
         "location": "Mt. Baker",
         "start": start.isoformat().replace("+00:00", "Z"),
         "end": end.isoformat().replace("+00:00", "Z"),
-        "capacity": 4,
         "price_cents": 25000,
         "description": "Technical glacier travel",
         "party": {
@@ -200,38 +198,10 @@ def test_create_trip_without_party_rejected(owner, service):
         "location": "Alpental",
         "start": start.isoformat().replace("+00:00", "Z"),
         "end": end.isoformat().replace("+00:00", "Z"),
-        "capacity": 4,
         "price_cents": 18000,
     }
 
     response = client.post("/api/trips/", payload, format="json")
-    assert response.status_code == 400
-
-
-@pytest.mark.django_db
-def test_booking_capacity_validation(monkeypatch, owner, trip):
-    trip.capacity = 2
-    trip.save()
-
-    Booking.objects.create(
-        trip=trip,
-        primary_guest=GuestProfile.objects.create(email="existing@example.com"),
-        party_size=2,
-        payment_status=Booking.PAID,
-        info_status=Booking.INFO_COMPLETE,
-        waiver_status=Booking.WAIVER_SIGNED,
-    )
-
-    client = APIClient()
-    client.force_authenticate(owner)
-
-    payload = {
-        "primary_guest": {
-            "email": "new@example.com",
-        }
-    }
-
-    response = client.post(f"/api/trips/{trip.id}/parties/", payload, format="json")
     assert response.status_code == 400
 
 
@@ -259,7 +229,6 @@ def test_create_trip_with_party_and_guide(monkeypatch, owner, service, guide_use
         "location": "Mt. Hood",
         "start": start.isoformat().replace("+00:00", "Z"),
         "end": end.isoformat().replace("+00:00", "Z"),
-        "capacity": 4,
         "price_cents": 15000,
         "description": "",
         "guides": [guide_user.id],
@@ -320,7 +289,6 @@ def test_create_trip_with_multiple_guides(monkeypatch, owner, service, guide_use
         "location": "Mt. Hood",
         "start": start.isoformat().replace("+00:00", "Z"),
         "end": end.isoformat().replace("+00:00", "Z"),
-        "capacity": 6,
         "price_cents": 22000,
         "description": "",
         "guides": [guide_user.id, additional_guide.id],

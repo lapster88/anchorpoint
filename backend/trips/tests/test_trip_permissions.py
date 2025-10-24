@@ -34,7 +34,6 @@ def _create_trip(service, title, start_offset_days=0):
         location="Somewhere",
         start=start,
         end=end,
-        capacity=4,
         price_cents=50000,
     )
 

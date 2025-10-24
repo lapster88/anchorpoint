@@ -172,6 +172,8 @@ This document captures the implementation plan for the guide service management 
    - On selection, pre-fill fields and show read-only preview of pricing snapshot; allow user overrides where appropriate (e.g., title override? confirm with product).
    - Show deposit calculated from snapshot.
 
+**Implementation note (Oct 2025):** Service settings now include a Templates card for owners/managers. Staff can create/edit templates tied to existing pricing models, and trip creation supports selecting a template to prefill details while snapping the pricing tiers into the new trip payload.
+
 ### Tests
 - Backend tests for template CRUD, trip creation snapshot logic.
 - Ensure updating a template later does not mutate existing trips.

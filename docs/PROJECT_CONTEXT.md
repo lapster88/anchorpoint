@@ -95,7 +95,10 @@ Users can belong to multiple guide services with different roles.
 
 ### Trip
 - `guide_service` (FK)
-- `title`, `location`, `start`, `end`, `capacity`, `price_cents`, `difficulty`, `description`
+- `title`, `location`, `start`, `end`, `price_cents`, `difficulty`, `description`
+- Optional planning metadata: `duration_hours`, target client/guide counts, staff notes
+- Pricing metadata: optional `pricing_model` FK plus `pricing_snapshot` storing tiers/deposits used at creation
+- Template provenance: optional `template_used` FK with corresponding `template_snapshot`
 
 ### Assignment
 - Link between **Trip** and **User** (guide)
@@ -170,8 +173,8 @@ Users can belong to multiple guide services with different roles.
 - Manages scheduling & guide assignments
 - Reconciles payments and generates CSV/Excel reports
 
-### Owner
-- Monitors revenue, utilization, upcoming capacity
+-### Owner
+- Monitors revenue, utilization, upcoming demand
 - Exports monthly/annual reports
 
 ---

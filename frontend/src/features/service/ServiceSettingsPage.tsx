@@ -6,8 +6,10 @@ import {
   fetchMemberships,
   ServiceMembership
 } from '../profile/api'
+import ServicePricingCard from './ServicePricingCard'
 import ServiceBrandingCard from '../profile/ServiceBrandingCard'
 import ServiceStripeCard from './ServiceStripeCard'
+import ServiceTemplatesCard from './ServiceTemplatesCard'
 
 const MANAGER_ROLES = new Set(['OWNER', 'OFFICE_MANAGER'])
 
@@ -58,6 +60,8 @@ export default function ServiceSettingsPage(){
           <div key={membership.id} className="space-y-6">
             <ServiceStripeCard membership={membership} />
             <ServiceBrandingCard membership={membership} />
+            <ServicePricingCard membership={membership} />
+            <ServiceTemplatesCard membership={membership} />
           </div>
         ))}
       </div>
