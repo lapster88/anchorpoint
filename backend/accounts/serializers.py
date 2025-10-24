@@ -1,8 +1,9 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from .models import ServiceMembership
+from .models import ServiceInvitation, ServiceMembership
 
 User = get_user_model()
 
@@ -171,3 +172,78 @@ class ServiceMembershipSerializer(serializers.ModelSerializer):
         if request is not None:
             return request.build_absolute_uri(url)
         return url
+
+
+class ServiceMembershipDetailSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    invited_by = UserSerializer(read_only=True)
+    last_login = serializers.DateTimeField(source="user.last_login", allow_null=True, read_only=True)
+
+    class Meta:
+        model = ServiceMembership
+        fields = [
+            "id",
+            "guide_service",
+            "role",
+            "is_active",
+            "user",
+            "invited_by",
+            "invited_at",
+            "accepted_at",
+            "last_login",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class ServiceInvitationSerializer(serializers.ModelSerializer):
+    invited_by = UserSerializer(read_only=True)
+    accept_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ServiceInvitation
+        fields = [
+            "id",
+            "guide_service",
+            "email",
+            "role",
+            "status",
+            "expires_at",
+            "invited_by",
+            "invited_at",
+            "accepted_at",
+            "cancelled_at",
+            "accept_url",
+        ]
+        read_only_fields = fields
+
+    def get_accept_url(self, obj: ServiceInvitation) -> str:
+        request = self.context.get("request")
+        base_url = getattr(settings, "FRONTEND_URL", "")
+        path = f"/invitations/{obj.token}"
+        if request is not None:
+            return request.build_absolute_uri(path)
+        if base_url:
+            return f"{base_url.rstrip('/')}{path}"
+        return path
+
+
+class ServiceInviteRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    role = serializers.ChoiceField(choices=ServiceMembership.ROLES)
+
+
+class ServiceInvitationPublicSerializer(serializers.ModelSerializer):
+    service_name = serializers.CharField(source="guide_service.name", read_only=True)
+
+    class Meta:
+        model = ServiceInvitation
+        fields = [
+            "email",
+            "role",
+            "status",
+            "expires_at",
+            "service_name",
+        ]
+        read_only_fields = fields

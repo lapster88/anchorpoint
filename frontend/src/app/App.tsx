@@ -1,17 +1,20 @@
-import { Routes, Route, Link } from 'react-router-dom'
+import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import AuthPage from '../features/auth/AuthPage'
 import TripsList from '../features/trips/TripsList'
 import ProfilePage from '../features/profile/ProfilePage'
 import GuideAvailabilityCalendar from '../features/availability/GuideAvailabilityCalendar'
 import ServiceSettingsPage from '../features/service/ServiceSettingsPage'
+import ServiceRosterPage from '../features/service/ServiceRosterPage'
 import { useAuth } from '../lib/auth'
 import GuestsDirectoryPage from '../features/staff/GuestsDirectoryPage'
 import { fetchMemberships } from '../features/profile/api'
 import CheckoutPreviewPage from '../features/payments/CheckoutPreviewPage'
+import InvitationAcceptPage from '../features/auth/InvitationAcceptPage'
 
 export default function App(){
   const { isAuthenticated, user, logout } = useAuth()
+  const location = useLocation()
   const { data: memberships } = useQuery({
     queryKey: ['memberships'],
     queryFn: fetchMemberships,
@@ -48,6 +51,14 @@ export default function App(){
   }
 
   if (!isAuthenticated) {
+    if (location.pathname.startsWith('/invitations/')) {
+      return (
+        <Routes>
+          <Route path="/invitations/:token" element={<InvitationAcceptPage />} />
+          <Route path="*" element={<AuthPage />} />
+        </Routes>
+      )
+    }
     return <AuthPage />
   }
 
@@ -62,6 +73,7 @@ export default function App(){
           <Link to="/" className="underline">Trips</Link>
           <Link to="/calendar" className="underline">Calendar</Link>
           {canManageService && <Link to="/service-settings" className="underline">Service Settings</Link>}
+          {canManageService && <Link to="/service-roster" className="underline">Service Roster</Link>}
           <Link to="/profile" className="underline">Profile</Link>
           {canManageGuests && <Link to="/guests" className="underline">Guests</Link>}
           <span className="text-sm text-gray-600">Signed in as {user?.display_name || user?.email}</span>
@@ -72,9 +84,11 @@ export default function App(){
         <Route path="/" element={<TripsList/>} />
         <Route path="/calendar" element={<GuideAvailabilityCalendar/>} />
         {canManageService && <Route path="/service-settings" element={<ServiceSettingsPage/>} />}
+        {canManageService && <Route path="/service-roster" element={<ServiceRosterPage />} />}
         <Route path="/profile" element={<ProfilePage/>} />
         <Route path="/payments/preview" element={<CheckoutPreviewPage />} />
         {canManageGuests && <Route path="/guests" element={<GuestsDirectoryPage/>} />}
+        <Route path="/invitations/:token" element={<InvitationAcceptPage />} />
       </Routes>
     </div>
   )

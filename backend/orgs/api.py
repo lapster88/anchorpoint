@@ -1,15 +1,27 @@
 import logging
 import mimetypes
-from datetime import datetime, timezone
+import secrets
+from datetime import datetime, timezone, timedelta
 
 import stripe
 from django.conf import settings
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from django.utils import timezone as django_timezone
+
+from accounts.models import ServiceInvitation, ServiceMembership, User
+from accounts.serializers import (
+    ServiceInvitationSerializer,
+    ServiceInviteRequestSerializer,
+    ServiceMembershipDetailSerializer,
+)
+from trips.models import Assignment
 
 from .models import GuideService, ServiceStripeAccount
 from .permissions import IsServiceOwnerOrManager
@@ -203,6 +215,244 @@ class StripeDisconnectView(GuideServiceStripeBaseView):
         self.guide_service.billing_stripe_account = ""
         self.guide_service.save(update_fields=["billing_stripe_account"])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+INVITE_EXPIRY = timedelta(days=7)
+
+
+def _build_invitation_url(token: str) -> str:
+    base_url = getattr(settings, "FRONTEND_URL", "")
+    path = f"/invitations/{token}"
+    if base_url:
+        return f"{base_url.rstrip('/')}{path}"
+    return path
+
+
+def _expire_invitation_if_needed(invitation: ServiceInvitation) -> ServiceInvitation:
+    if invitation.status == ServiceInvitation.STATUS_PENDING and invitation.expires_at < django_timezone.now():
+        invitation.status = ServiceInvitation.STATUS_EXPIRED
+        invitation.save(update_fields=["status"])
+    return invitation
+
+
+def _ensure_can_modify_membership(membership: ServiceMembership):
+    if membership.role != ServiceMembership.OWNER:
+        return
+    remaining = ServiceMembership.objects.filter(
+        guide_service=membership.guide_service,
+        role=ServiceMembership.OWNER,
+        is_active=True,
+    ).exclude(pk=membership.pk)
+    if not remaining.exists():
+        raise ValueError("Each guide service must retain at least one active owner.")
+
+
+def _remove_future_assignments(membership: ServiceMembership):
+    if not membership.user_id:
+        return
+    Assignment.objects.filter(
+        guide=membership.user,
+        trip__guide_service=membership.guide_service,
+        trip__end__gte=django_timezone.now(),
+    ).delete()
+
+
+class ServiceRosterView(GuideServiceBaseView):
+    def get(self, request, service_id, *args, **kwargs):
+        memberships = ServiceMembership.objects.filter(
+            guide_service=self.guide_service
+        ).select_related("user", "invited_by")
+        invitations = ServiceInvitation.objects.filter(
+            guide_service=self.guide_service
+        ).exclude(status=ServiceInvitation.STATUS_CANCELLED).select_related("invited_by")
+        invitations = [_expire_invitation_if_needed(inv) for inv in invitations]
+
+        member_payload = ServiceMembershipDetailSerializer(
+            memberships, many=True, context={"request": request}
+        ).data
+        invitation_payload = ServiceInvitationSerializer(
+            invitations, many=True, context={"request": request}
+        ).data
+        return Response({"members": member_payload, "invitations": invitation_payload})
+
+    def post(self, request, service_id, *args, **kwargs):
+        serializer = ServiceInviteRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data["email"].lower()
+        role = serializer.validated_data["role"]
+
+        existing_user = User.objects.filter(email__iexact=email).first()
+        now = django_timezone.now()
+
+        if existing_user:
+            with transaction.atomic():
+                membership, created = ServiceMembership.objects.get_or_create(
+                    user=existing_user,
+                    guide_service=self.guide_service,
+                    defaults={
+                        "role": role,
+                        "is_active": True,
+                        "invited_by": request.user,
+                        "invited_at": now,
+                        "accepted_at": now,
+                    },
+                )
+                if not created:
+                    membership.role = role
+                    membership.is_active = True
+                    membership.invited_by = request.user
+                    membership.invited_at = now
+                    membership.accepted_at = membership.accepted_at or now
+                    membership.save(update_fields=[
+                        "role",
+                        "is_active",
+                        "invited_by",
+                        "invited_at",
+                        "accepted_at",
+                        "updated_at",
+                    ])
+                ServiceInvitation.objects.filter(
+                    guide_service=self.guide_service,
+                    email=email,
+                    status=ServiceInvitation.STATUS_PENDING,
+                ).update(status=ServiceInvitation.STATUS_CANCELLED, cancelled_at=now)
+
+            data = ServiceMembershipDetailSerializer(
+                membership, context={"request": request}
+            ).data
+            status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+            return Response({"member": data}, status=status_code)
+
+        token = secrets.token_urlsafe(32)
+        expires_at = now + INVITE_EXPIRY
+        invitation, created = ServiceInvitation.objects.update_or_create(
+            guide_service=self.guide_service,
+            email=email,
+            status=ServiceInvitation.STATUS_PENDING,
+            defaults={
+                "role": role,
+                "token": token,
+                "expires_at": expires_at,
+                "invited_by": request.user,
+                "invited_at": now,
+                "accepted_at": None,
+                "cancelled_at": None,
+                "membership": None,
+            },
+        )
+
+        accept_url = _build_invitation_url(invitation.token)
+        logger.info(
+            "Service invitation created for %s on %s (role=%s): %s",
+            email,
+            self.guide_service.name,
+            role,
+            accept_url,
+        )
+
+        data = ServiceInvitationSerializer(invitation, context={"request": request}).data
+        return Response({"invitation": data}, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+class ServiceMembershipDetailView(GuideServiceBaseView):
+    def patch(self, request, service_id, membership_id, *args, **kwargs):
+        membership = get_object_or_404(
+            ServiceMembership.objects.select_related("user", "invited_by"),
+            pk=membership_id,
+            guide_service=self.guide_service,
+        )
+
+        role = request.data.get("role")
+        is_active = request.data.get("is_active")
+        now = django_timezone.now()
+
+        if role and role not in dict(ServiceMembership.ROLES):
+            return Response({"role": "Invalid role."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            if role and role != membership.role:
+                if membership.role == ServiceMembership.OWNER and role != ServiceMembership.OWNER:
+                    _ensure_can_modify_membership(membership)
+                membership.role = role
+
+            if is_active is not None:
+                is_active = bool(is_active)
+                if is_active and not membership.is_active:
+                    membership.is_active = True
+                    membership.accepted_at = membership.accepted_at or now
+                elif not is_active and membership.is_active:
+                    _ensure_can_modify_membership(membership)
+                    membership.is_active = False
+                    _remove_future_assignments(membership)
+
+            membership.invited_by = membership.invited_by or request.user
+            membership.invited_at = membership.invited_at or now
+            membership.save()
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = ServiceMembershipDetailSerializer(membership, context={"request": request}).data
+        return Response({"member": data})
+
+    def delete(self, request, service_id, membership_id, *args, **kwargs):
+        membership = get_object_or_404(
+            ServiceMembership.objects.select_related("user"),
+            pk=membership_id,
+            guide_service=self.guide_service,
+        )
+
+        try:
+            _ensure_can_modify_membership(membership)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        _remove_future_assignments(membership)
+        membership.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ServiceInvitationDetailView(GuideServiceBaseView):
+    def delete(self, request, service_id, invitation_id, *args, **kwargs):
+        invitation = get_object_or_404(
+            ServiceInvitation.objects.select_related("invited_by"),
+            pk=invitation_id,
+            guide_service=self.guide_service,
+        )
+        invitation.status = ServiceInvitation.STATUS_CANCELLED
+        invitation.cancelled_at = django_timezone.now()
+        invitation.save(update_fields=["status", "cancelled_at"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ServiceInvitationResendView(GuideServiceBaseView):
+    def post(self, request, service_id, invitation_id, *args, **kwargs):
+        invitation = get_object_or_404(
+            ServiceInvitation.objects.select_related("invited_by"),
+            pk=invitation_id,
+            guide_service=self.guide_service,
+        )
+        if invitation.status != ServiceInvitation.STATUS_PENDING:
+            return Response(
+                {"detail": "Only pending invitations can be resent."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        invitation.token = secrets.token_urlsafe(32)
+        invitation.expires_at = django_timezone.now() + INVITE_EXPIRY
+        invitation.invited_by = request.user
+        invitation.invited_at = django_timezone.now()
+        invitation.save(update_fields=["token", "expires_at", "invited_by", "invited_at"])
+
+        accept_url = _build_invitation_url(invitation.token)
+        logger.info(
+            "Service invitation resent for %s on %s: %s",
+            invitation.email,
+            self.guide_service.name,
+            accept_url,
+        )
+
+        data = ServiceInvitationSerializer(invitation, context={"request": request}).data
+        return Response({"invitation": data})
 
 
 class StripeWebhookView(APIView):

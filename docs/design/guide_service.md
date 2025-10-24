@@ -181,6 +181,19 @@ This document captures the implementation plan for the guide service management 
 
 ## Guide Roster
 
+### Requirements Recap
+- Owners/managers invite anyone (guides or office managers) via email.
+- Pending invites stay visible with status and expiry; owners can resend or cancel.
+- Invite acceptance supports new-user registration or existing accounts.
+- When a member is deactivated or removed, upcoming trip assignments must clear automatically.
+
+### Implementation Notes (Oct 2025)
+- New roster API (`/api/orgs/<service_id>/members/`) exposes active members plus pending invitations.
+- `ServiceInvitation` tracks pending invites with token + expiry; acceptance endpoint lives under `/api/auth/invitations/<token>/accept/`.
+- Frontend roster page (`/service-roster`) lets owners/managers invite, toggle active, resend/cancel invites.
+- Deactivating a member removes their future `Assignment` rows so schedules stay accurate.
+- Inviting an email that already has an account creates/activates the membership immediately instead of issuing an invite.
+
 ### Requirements
 - Owner/manager needs to manage guides attached to service:
   - View roster.

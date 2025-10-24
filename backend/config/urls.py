@@ -7,6 +7,8 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from accounts.api import (
     ChangePasswordView,
+    InvitationAcceptView,
+    InvitationStatusView,
     LoginView,
     MeView,
     RegisterView,
@@ -20,6 +22,10 @@ from bookings.api import GuestLinkRequestView, GuestProfileUpdateView, GuestProf
 from orgs.api import (
     GuideServiceDetailView,
     GuideServiceLogoView,
+    ServiceInvitationDetailView,
+    ServiceInvitationResendView,
+    ServiceMembershipDetailView,
+    ServiceRosterView,
     StripeAccountStatusView,
     StripeDisconnectView,
     StripeOnboardingLinkView,
@@ -58,6 +64,16 @@ urlpatterns = [
         ServiceMembershipListView.as_view(),
         name="auth-memberships",
     ),
+    path(
+        "api/auth/invitations/<str:token>/",
+        InvitationStatusView.as_view(),
+        name="auth-invitation-status",
+    ),
+    path(
+        "api/auth/invitations/<str:token>/accept/",
+        InvitationAcceptView.as_view(),
+        name="auth-invitation-accept",
+    ),
     path("api/auth/me/", MeView.as_view(), name="auth-me"),
     path("api/guest-links/", GuestLinkRequestView.as_view(), name="guest-link"),
     path(
@@ -80,6 +96,26 @@ urlpatterns = [
         "api/orgs/<int:service_id>/stripe/disconnect/",
         StripeDisconnectView.as_view(),
         name="guide-service-stripe-disconnect",
+    ),
+    path(
+        "api/orgs/<int:service_id>/members/",
+        ServiceRosterView.as_view(),
+        name="guide-service-roster",
+    ),
+    path(
+        "api/orgs/<int:service_id>/members/<int:membership_id>/",
+        ServiceMembershipDetailView.as_view(),
+        name="guide-service-member-detail",
+    ),
+    path(
+        "api/orgs/<int:service_id>/invitations/<int:invitation_id>/",
+        ServiceInvitationDetailView.as_view(),
+        name="guide-service-invitation-detail",
+    ),
+    path(
+        "api/orgs/<int:service_id>/invitations/<int:invitation_id>/resend/",
+        ServiceInvitationResendView.as_view(),
+        name="guide-service-invitation-resend",
     ),
     path(
         "api/orgs/<int:service_id>/logo/",

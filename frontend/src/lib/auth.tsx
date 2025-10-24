@@ -42,6 +42,7 @@ type AuthContextValue = {
   updateProfile: (payload: ProfileUpdatePayload) => Promise<void>
   changePassword: (payload: { current_password: string; new_password: string }) => Promise<void>
   logout: () => void
+  authenticateWithTokens: (payload: { user: StoredAuth['user']; access: string; refresh: string }) => void
 }
 
 type SetAuthInput =
@@ -240,6 +241,13 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
     setAuth(null)
   }, [setAuth])
 
+  const authenticateWithTokens = useCallback(
+    (payload: { user: StoredAuth['user']; access: string; refresh: string }) => {
+      setAuth({ user: payload.user, access: payload.access, refresh: payload.refresh })
+    },
+    [setAuth]
+  )
+
   // Re-sync the user profile when we obtain a new access token.
   useEffect(() => {
     if (!auth?.access) return
@@ -281,9 +289,10 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
       register,
       updateProfile,
       changePassword,
-      logout
+      logout,
+      authenticateWithTokens
     }),
-    [auth, login, register, updateProfile, changePassword, logout]
+    [auth, login, register, updateProfile, changePassword, logout, authenticateWithTokens]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
