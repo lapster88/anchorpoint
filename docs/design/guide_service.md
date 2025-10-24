@@ -104,7 +104,6 @@ This document captures the implementation plan for the guide service management 
        min_guests
        max_guests  # null for “greater than”
        price_per_guest
-       order
        unique_together: (model, min_guests)
    ```
 2. Validation:
@@ -112,6 +111,8 @@ This document captures the implementation plan for the guide service management 
    - Require final tier with `max_guests = null` for open-ended pricing (optional but recommended).
    - Validate percentage range for deposits.
 3. API: CRUD endpoints for PricingModel with nested tier management (create/update tiers together).
+   - Expose list/retrieve for guides if needed, but restrict create/update/delete to owners/managers.
+   - Nested writes should validate contiguity and ensure the final tier covers the open-ended range.
 
 ### Frontend
 1. Pricing tab in service settings:

@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.db.models import Sum
 from rest_framework import permissions, status, viewsets
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -18,8 +19,9 @@ from bookings.services.guest_tokens import issue_guest_access_token
 from bookings.services.guests import upsert_guest_profile
 from bookings.services.payments import create_checkout_session
 from payments.models import Payment
-from .models import Trip, Assignment
+from .models import Trip, Assignment, PricingModel
 from .serializers import TripSerializer, TripCreateSerializer, GuideSummarySerializer
+from .serializers_pricing import PricingModelSerializer
 
 
 class TripViewSet(viewsets.ModelViewSet):
@@ -280,3 +282,62 @@ class TripViewSet(viewsets.ModelViewSet):
         trip.refresh_from_db()
         serializer = TripSerializer(trip, context=self.get_serializer_context())
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class PricingModelViewSet(viewsets.ModelViewSet):
+    serializer_class = PricingModelSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = (
+            PricingModel.objects.select_related('service')
+            .prefetch_related('tiers')
+            .order_by('name')
+        )
+        user = self.request.user
+        service_id = self.request.query_params.get('service')
+
+        if user.is_superuser:
+            if service_id:
+                return queryset.filter(service_id=service_id)
+            return queryset
+
+        memberships = ServiceMembership.objects.filter(user=user, is_active=True)
+        if not memberships.exists():
+            return queryset.none()
+
+        service_ids = memberships.values_list('guide_service_id', flat=True)
+        queryset = queryset.filter(service_id__in=service_ids)
+        if service_id:
+            queryset = queryset.filter(service_id=service_id)
+        return queryset
+
+    def _ensure_can_manage(self, service_id: int):
+        user = self.request.user
+        if user.is_superuser:
+            return
+        allowed = ServiceMembership.objects.filter(
+            user=user,
+            guide_service_id=service_id,
+            role__in=[ServiceMembership.OWNER, ServiceMembership.MANAGER],
+            is_active=True,
+        ).exists()
+        if not allowed:
+            raise PermissionDenied("Not permitted to manage pricing for this service.")
+
+    def perform_create(self, serializer):
+        service = serializer.validated_data['service']
+        self._ensure_can_manage(service.id)
+        serializer.save(created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        service = serializer.validated_data.get('service', instance.service)
+        if service != instance.service:
+            raise PermissionDenied("Cannot move pricing models between services.")
+        self._ensure_can_manage(instance.service_id)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._ensure_can_manage(instance.service_id)
+        instance.delete()
