@@ -325,21 +325,39 @@ class ServiceRosterView(GuideServiceBaseView):
 
         token = secrets.token_urlsafe(32)
         expires_at = now + INVITE_EXPIRY
-        invitation, created = ServiceInvitation.objects.update_or_create(
+        invitation, created = ServiceInvitation.objects.get_or_create(
             guide_service=self.guide_service,
             email=email,
-            status=ServiceInvitation.STATUS_PENDING,
             defaults={
                 "role": role,
                 "token": token,
                 "expires_at": expires_at,
                 "invited_by": request.user,
                 "invited_at": now,
-                "accepted_at": None,
-                "cancelled_at": None,
-                "membership": None,
+                "status": ServiceInvitation.STATUS_PENDING,
             },
         )
+        if not created:
+            invitation.role = role
+            invitation.token = token
+            invitation.expires_at = expires_at
+            invitation.invited_by = request.user
+            invitation.invited_at = now
+            invitation.accepted_at = None
+            invitation.cancelled_at = None
+            invitation.membership = None
+            invitation.status = ServiceInvitation.STATUS_PENDING
+            invitation.save(update_fields=[
+                "role",
+                "token",
+                "expires_at",
+                "invited_by",
+                "invited_at",
+                "accepted_at",
+                "cancelled_at",
+                "membership",
+                "status",
+            ])
 
         accept_url = _build_invitation_url(invitation.token)
         logger.info(

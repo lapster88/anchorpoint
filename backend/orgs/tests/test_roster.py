@@ -145,6 +145,40 @@ def test_cancel_invitation(api_client, service):
     assert invitation.status == ServiceInvitation.STATUS_CANCELLED
 
 
+def test_cancel_and_reinvite_same_email(api_client, service):
+    invitation = ServiceInvitation.objects.create(
+        guide_service=service,
+        email="cycle@example.com",
+        role=ServiceMembership.GUIDE,
+        status=ServiceInvitation.STATUS_PENDING,
+        token=secrets.token_urlsafe(12),
+        expires_at=timezone.now() + timedelta(days=7),
+    )
+
+    # cancel existing invitation
+    response = api_client.delete(
+        f"/api/orgs/{service.id}/invitations/{invitation.id}/",
+    )
+    assert response.status_code == 204
+
+    # re-invite same email
+    response = api_client.post(
+        f"/api/orgs/{service.id}/members/",
+        {"email": "cycle@example.com", "role": ServiceMembership.GUIDE},
+        format="json",
+    )
+    assert response.status_code == 200
+    invitation.refresh_from_db()
+    assert invitation.status == ServiceInvitation.STATUS_PENDING
+
+    # cancel again should succeed
+    response = api_client.delete(
+        f"/api/orgs/{service.id}/invitations/{invitation.id}/",
+    )
+    assert response.status_code == 204
+    invitation.refresh_from_db()
+    assert invitation.status == ServiceInvitation.STATUS_CANCELLED
+
 def test_deactivating_membership_removes_future_assignments(api_client, service):
     guide = User.objects.create_user(
         username="guide2@example.com",

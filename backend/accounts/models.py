@@ -96,7 +96,7 @@ class ServiceInvitation(models.Model):
     )
 
     class Meta:
-        unique_together = ("guide_service", "email", "status")
+        unique_together = ("guide_service", "email")
 
     def __str__(self):
         return f"Invitation {self.email} -> {self.guide_service.name}"
