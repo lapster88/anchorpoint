@@ -213,9 +213,7 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
       if (prevTemplateIdRef.current) {
         prevTemplateIdRef.current = ''
       }
-      if (manualPriceRef.current !== undefined) {
-        setPrice(manualPriceRef.current)
-      }
+      setPrice(manualPriceRef.current || '')
       return
     }
     if (prevTemplateIdRef.current === selectedTemplateId) {
@@ -228,18 +226,21 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
     setTargetClients(String(selectedTemplate.target_client_count || ''))
     setTargetGuides(String(selectedTemplate.target_guide_count || ''))
     setNotes(selectedTemplate.notes || '')
-    const firstTier = selectedTemplate.pricing_tiers[0]
-    setPrice(firstTier ? String(firstTier.price_per_guest) : '')
   }, [selectedTemplate, selectedTemplateId])
 
   useEffect(() => {
     if (!hasTemplatePricing) {
       manualPriceRef.current = price
-    } else if (selectedTemplate) {
-      const firstTier = selectedTemplate.pricing_tiers[0]
-      setPrice(firstTier ? String(firstTier.price_per_guest) : '')
+      return
     }
-  }, [hasTemplatePricing, price, selectedTemplate])
+    if (!selectedTemplate) {
+      return
+    }
+    const nextPrice = selectTemplateRate(selectedTemplate, calculatedPartySize)
+    if (nextPrice !== price) {
+      setPrice(nextPrice)
+    }
+  }, [calculatedPartySize, hasTemplatePricing, price, selectedTemplate])
 
   if (!serviceId) {
     return (
@@ -652,4 +653,17 @@ function formatCurrency(value: string, currency: string){
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(amount)
+}
+
+function selectTemplateRate(template: TripTemplateOption, partySize: number): string{
+  const tiers = template.pricing_tiers ?? []
+  if (!tiers.length){
+    return ''
+  }
+
+  const normalizedSize = Number.isFinite(partySize) && partySize > 0 ? partySize : 1
+  const matchingTier = tiers.find((tier) => tier.max_guests === null || normalizedSize <= tier.max_guests)
+  const resolvedTier = matchingTier ?? tiers[tiers.length - 1]
+  const price = resolvedTier?.price_per_guest * partySize
+  return price === undefined || price === null ? '' : String(price)
 }

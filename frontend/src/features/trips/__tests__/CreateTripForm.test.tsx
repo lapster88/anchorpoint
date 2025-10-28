@@ -176,7 +176,12 @@ describe('CreateTripForm', () => {
     await userEvent.selectOptions(screen.getByLabelText('Template'), '55')
     await userEvent.type(screen.getByLabelText('Start'), '2025-10-20T08:00')
     await userEvent.type(screen.getByLabelText('End'), '2025-10-20T16:00')
+    const priceField = (await screen.findByLabelText(/Price/i)) as HTMLInputElement
+    await waitFor(() => expect(Number(priceField.value)).toBeCloseTo(150, 2))
     await userEvent.type(screen.getByLabelText(/^Email/), 'guest@example.com')
+    const partySizeInput = await screen.findByLabelText('Party size')
+    await userEvent.type(partySizeInput, '5')
+    await waitFor(() => expect(Number(priceField.value)).toBeCloseTo(130, 2))
 
     await userEvent.click(screen.getByRole('button', { name: 'Create trip' }))
 
