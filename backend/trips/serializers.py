@@ -28,8 +28,7 @@ class TripSerializer(serializers.ModelSerializer):
             "difficulty",
             "description",
             "duration_hours",
-            "target_client_count",
-            "target_guide_count",
+            "target_clients_per_guide",
             "notes",
             "pricing_snapshot",
             "template_id",
@@ -95,8 +94,7 @@ class TripCreateSerializer(TripSerializer):
             if not validated_data.get("location"):
                 validated_data["location"] = template.location
             validated_data.setdefault("duration_hours", template.duration_hours)
-            validated_data.setdefault("target_client_count", template.target_client_count)
-            validated_data.setdefault("target_guide_count", template.target_guide_count)
+            validated_data.setdefault("target_clients_per_guide", template.target_clients_per_guide)
             if not validated_data.get("notes"):
                 validated_data["notes"] = template.notes
             snapshot = template.to_snapshot()
@@ -131,6 +129,9 @@ class TripCreateSerializer(TripSerializer):
             raise serializers.ValidationError({"template": "Template is no longer active."})
         if template is None and price_cents in (None, "", 0):
             raise serializers.ValidationError({"price_cents": "Price per guest is required when no template pricing is selected."})
+        ratio = attrs.get("target_clients_per_guide")
+        if ratio is not None and ratio <= 0:
+            raise serializers.ValidationError({"target_clients_per_guide": "Enter a value greater than zero."})
         if not template:
             if not attrs.get("title"):
                 raise serializers.ValidationError({"title": "This field is required."})
@@ -178,8 +179,7 @@ class TripTemplateSerializer(serializers.ModelSerializer):
             "is_deposit_required",
             "deposit_percent",
             "pricing_tiers",
-            "target_client_count",
-            "target_guide_count",
+            "target_clients_per_guide",
             "notes",
             "is_active",
             "created_at",
@@ -191,6 +191,12 @@ class TripTemplateSerializer(serializers.ModelSerializer):
         tiers = attrs.get("pricing_tiers") or getattr(self.instance, "pricing_tiers", [])
         if not tiers:
             raise serializers.ValidationError({"pricing_tiers": "At least one tier is required."})
+
+        ratio = attrs.get("target_clients_per_guide")
+        if ratio is None:
+            ratio = getattr(self.instance, "target_clients_per_guide", None)
+        if ratio is not None and ratio <= 0:
+            raise serializers.ValidationError({"target_clients_per_guide": "Enter a value greater than zero."})
 
         sorted_tiers = sorted(tiers, key=lambda t: t.get("min_guests") or 0)
         last_max = 0

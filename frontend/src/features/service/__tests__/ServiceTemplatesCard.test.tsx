@@ -54,8 +54,7 @@ const baseTemplate = {
     { min_guests: 1, max_guests: 2, price_per_guest: '150.00' },
     { min_guests: 3, max_guests: null, price_per_guest: '130.00' }
   ],
-  target_client_count: 6,
-  target_guide_count: 2,
+  target_clients_per_guide: 3,
   notes: 'Bring crampons',
   is_active: true,
   created_at: '',
@@ -98,6 +97,7 @@ describe('ServiceTemplatesCard', () => {
     const cards = screen.getAllByRole('listitem')
     const firstCard = cards[0]
     expect(within(firstCard).getByText(/Duration: 8h/)).toBeInTheDocument()
+    expect(within(firstCard).getByText(/Target guests per guide: 3/)).toBeInTheDocument()
     expect(screen.getAllByText(/\$150\.00/)[0]).toBeInTheDocument()
     expect(screen.getByText(/Inactive/)).toBeInTheDocument()
   })
@@ -111,8 +111,7 @@ describe('ServiceTemplatesCard', () => {
     await userEvent.type(screen.getByLabelText(/Title/i), 'Private Ice')
     await userEvent.type(screen.getByLabelText(/^Location/i), 'Coleman Icefall')
     await userEvent.type(screen.getByLabelText(/Duration \(hours\)/i), '9')
-    await userEvent.type(screen.getByLabelText(/Clients per trip/i), '5')
-    await userEvent.type(screen.getByLabelText(/Guides per trip/i), '2')
+    await userEvent.type(screen.getByLabelText(/Target guests per guide/i), '4')
     await userEvent.type(screen.getByLabelText(/Price per guest/i), '175')
     await userEvent.type(screen.getByLabelText(/Notes \(optional\)/i), 'Ice screws required')
 
@@ -130,8 +129,7 @@ describe('ServiceTemplatesCard', () => {
       pricing_tiers: [
         { min_guests: 1, max_guests: null, price_per_guest: '175' }
       ],
-      target_client_count: 5,
-      target_guide_count: 2,
+      target_clients_per_guide: 4,
       notes: 'Ice screws required',
       is_active: true
     })
@@ -171,8 +169,7 @@ describe('ServiceTemplatesCard', () => {
         { min_guests: 1, max_guests: 2, price_per_guest: '155' },
         { min_guests: 3, max_guests: null, price_per_guest: '130.00' }
       ],
-      target_client_count: 6,
-      target_guide_count: 2,
+      target_clients_per_guide: 3,
       notes: 'Updated notes',
       is_active: false
     })

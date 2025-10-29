@@ -14,8 +14,7 @@ class Trip(models.Model):
     difficulty = models.CharField(max_length=50, blank=True)
     description = models.TextField(blank=True)
     duration_hours = models.PositiveIntegerField(null=True, blank=True)
-    target_client_count = models.PositiveIntegerField(null=True, blank=True)
-    target_guide_count = models.PositiveIntegerField(null=True, blank=True)
+    target_clients_per_guide = models.PositiveIntegerField(null=True, blank=True)
     notes = models.TextField(blank=True)
     pricing_snapshot = models.JSONField(blank=True, null=True)
     template_used = models.ForeignKey(
@@ -73,8 +72,7 @@ class TripTemplate(models.Model):
     title = models.CharField(max_length=200)
     duration_hours = models.PositiveIntegerField()
     location = models.CharField(max_length=200)
-    target_client_count = models.PositiveIntegerField(default=1)
-    target_guide_count = models.PositiveIntegerField(default=1)
+    target_clients_per_guide = models.PositiveIntegerField(null=True, blank=True)
     notes = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     created_by = models.ForeignKey(
@@ -121,8 +119,7 @@ class TripTemplate(models.Model):
             "title": self.title,
             "duration_hours": self.duration_hours,
             "location": self.location,
-            "target_client_count": self.target_client_count,
-            "target_guide_count": self.target_guide_count,
+            "target_clients_per_guide": self.target_clients_per_guide,
             "notes": self.notes,
             "pricing": {
                 "currency": self.pricing_currency,

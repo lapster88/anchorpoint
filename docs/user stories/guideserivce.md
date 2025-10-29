@@ -19,7 +19,7 @@ Users need to be able to create and manage trip templates. Trip templates need t
 - Duration
 - Location
 - Tiered pricing (currency, optional deposit percent, contiguous per-guest tiers with an open-ended final tier)
-- Target client to guide ratio
+- Target guests-per-guide goal (used for staffing, not a hard requirement)
 
 Trip templates will then be used in the trip creation form to make trip creation easier. trip creation will also support
 a "no template" custom trip as well. Staff should be able to duplicate an existing template to speed up seasonal or private variants; duplicates automatically append a suffix to the title so they are easy to distinguish.

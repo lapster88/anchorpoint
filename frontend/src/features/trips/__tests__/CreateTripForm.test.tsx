@@ -52,6 +52,7 @@ describe('CreateTripForm', () => {
       price_cents: 15000,
       difficulty: null,
       description: '',
+      target_clients_per_guide: null,
       pricing_snapshot: {
         currency: 'usd',
         is_deposit_required: false,
@@ -86,8 +87,7 @@ describe('CreateTripForm', () => {
     await userEvent.type(screen.getByLabelText('Start'), '2025-10-20T08:00')
     await userEvent.type(screen.getByLabelText('End'), '2025-10-20T16:00')
     await userEvent.type(screen.getByLabelText('Duration (hours)'), '8')
-    await userEvent.type(screen.getByLabelText('Clients per trip'), '4')
-    await userEvent.type(screen.getByLabelText('Guides per trip'), '1')
+    await userEvent.type(screen.getByLabelText('Target guests per guide (optional)'), '4')
     await userEvent.type(screen.getByLabelText('Price (USD)'), '0')
     await userEvent.type(screen.getByLabelText(/^Email/), 'guest@example.com')
 
@@ -114,8 +114,7 @@ describe('CreateTripForm', () => {
     await userEvent.type(screen.getByLabelText('Start'), '2025-10-20T08:00')
     await userEvent.type(screen.getByLabelText('End'), '2025-10-20T16:00')
     await userEvent.type(screen.getByLabelText('Duration (hours)'), '9')
-    await userEvent.type(screen.getByLabelText('Clients per trip'), '6')
-    await userEvent.type(screen.getByLabelText('Guides per trip'), '2')
+    await userEvent.type(screen.getByLabelText('Target guests per guide (optional)'), '3')
     await userEvent.type(screen.getByLabelText('Price (USD)'), '150')
     await userEvent.type(screen.getByLabelText(/^Email/), 'guest@example.com')
     await userEvent.type(screen.getByLabelText('First name'), 'Greta')
@@ -137,8 +136,7 @@ describe('CreateTripForm', () => {
     expect(payload.location).toBe('Mt. Baker')
     expect(payload.price_cents).toBe(15000)
     expect(payload.duration_hours).toBe(9)
-    expect(payload.target_client_count).toBe(6)
-    expect(payload.target_guide_count).toBe(2)
+    expect(payload.target_clients_per_guide).toBe(3)
     // pricing driven by manual entry in this scenario, template not used
     expect(payload.party.primary_guest.email).toBe('guest@example.com')
     expect(payload.party.additional_guests?.[0].email).toBe('friend@example.com')
@@ -162,8 +160,7 @@ describe('CreateTripForm', () => {
           { min_guests: 1, max_guests: 4, price_per_guest: '150.00' },
           { min_guests: 5, max_guests: null, price_per_guest: '130.00' }
         ],
-        target_client_count: 6,
-        target_guide_count: 2,
+        target_clients_per_guide: 3,
         notes: 'Bring crampons',
         is_active: true
       }
@@ -192,8 +189,7 @@ describe('CreateTripForm', () => {
     expect(payload.price_cents).toBeUndefined()
     expect(payload.price_cents).toBeUndefined()
     expect(payload.duration_hours).toBe(8)
-    expect(payload.target_client_count).toBe(6)
-    expect(payload.target_guide_count).toBe(2)
+    expect(payload.target_clients_per_guide).toBe(3)
     expect(payload.notes).toBe('Bring crampons')
     expect(payload.location).toBe('Mount Baker')
   })

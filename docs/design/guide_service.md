@@ -77,7 +77,7 @@ This document captures the implementation plan for the guide service management 
 ## Trip Templates
 
 ### Requirements
-- Templates bundle reusable trip metadata (title, duration, location, staffing ratios) and tiered pricing.
+- Templates bundle reusable trip metadata (title, duration, location, target guests-per-guide goal) and tiered pricing.
 - Pricing fields: currency, optional deposit percent, and contiguous per-guest tiers ending in an open-ended tier.
 - Templates can be duplicated to jump-start variations (e.g., seasonal tweaks).
 - When a trip is created from a template we snapshot the template metadata + pricing so later edits do not affect booked trips.
@@ -92,7 +92,7 @@ This document captures the implementation plan for the guide service management 
 1. Service settings expose a templates card listing templates, pricing previews, and actions (edit, duplicate, deactivate/delete).
 2. The modal editor captures metadata + tier rows directly (no separate pricing screen).
 3. Trip create form shows a template dropdown; choosing a template pre-fills metadata, displays pricing tiers, and disables manual price entry.
-4. Manual trips still collect duration/ratio/price; templates remain optional.
+4. Manual trips still collect duration, target guests-per-guide, and price; templates remain optional.
 
 ### Tests
 - Backend tests cover template CRUD, duplication, and trip snapshot behavior.

@@ -115,8 +115,7 @@ class Command(BaseCommand):
                 price_cents=45000,
                 difficulty="Beginner",
                 duration_hours=8,
-                target_client_count=4,
-                target_guide_count=1,
+                target_clients_per_guide=4,
                 notes="Full day trad fundamentals session.",
             )
             glacier_trip = self._create_trip(
@@ -128,8 +127,7 @@ class Command(BaseCommand):
                 price_cents=89000,
                 difficulty="Intermediate",
                 duration_hours=48,
-                target_client_count=6,
-                target_guide_count=2,
+                target_clients_per_guide=3,
                 notes="Includes snow school and summit attempt.",
             )
             desert_trip = self._create_trip(
@@ -141,8 +139,7 @@ class Command(BaseCommand):
                 price_cents=72000,
                 difficulty="Advanced",
                 duration_hours=20,
-                target_client_count=2,
-                target_guide_count=1,
+                target_clients_per_guide=2,
                 notes="Two-day tower objective with overnight camp.",
             )
 
@@ -163,8 +160,7 @@ class Command(BaseCommand):
                         {"min_guests": 1, "max_guests": 2, "price_per_guest": "150.00"},
                         {"min_guests": 3, "max_guests": None, "price_per_guest": "120.00"},
                     ],
-                    "target_client_count": 6,
-                    "target_guide_count": 2,
+                    "target_clients_per_guide": 3,
                     "notes": "Bring glacier kits and crampons.",
                     "created_by": owner,
                     "is_active": True,
@@ -305,8 +301,7 @@ class Command(BaseCommand):
         price_cents: int,
         difficulty: str,
         duration_hours: int | None = None,
-        target_client_count: int | None = None,
-        target_guide_count: int | None = None,
+        target_clients_per_guide: int | None = None,
         notes: str = "",
     ) -> Trip:
         return Trip.objects.create(
@@ -318,8 +313,7 @@ class Command(BaseCommand):
             difficulty=difficulty,
             description=f"Sample itinerary for {title}.",
             duration_hours=duration_hours,
-            target_client_count=target_client_count,
-            target_guide_count=target_guide_count,
+            target_clients_per_guide=target_clients_per_guide,
             notes=notes,
             pricing_snapshot=build_single_tier_snapshot(price_cents),
         )

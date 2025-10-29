@@ -96,7 +96,7 @@ Users can belong to multiple guide services with different roles.
 ### Trip
 - `guide_service` (FK)
 - `title`, `location`, `start`, `end`, `price_cents`, `difficulty`, `description`
-- Optional planning metadata: `duration_hours`, target client/guide counts, staff notes
+- Optional planning metadata: `duration_hours`, target guests-per-guide ratio, staff notes
 - Pricing metadata: snapshot (currency, deposit, tier prices) pulled from the template at creation time
 - Template provenance: optional `template_used` FK with corresponding `template_snapshot`
 

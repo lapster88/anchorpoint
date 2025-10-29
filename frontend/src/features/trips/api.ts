@@ -33,8 +33,7 @@ export type TripDetail = {
   difficulty: string | null
   description: string
   duration_hours: number | null
-  target_client_count: number | null
-  target_guide_count: number | null
+  target_clients_per_guide: number | null
   notes: string | null
   parties: TripPartySummary[]
   assignments: TripAssignment[]
@@ -54,8 +53,7 @@ export type CreateTripPayload = {
   difficulty?: string | null
   description?: string
   duration_hours?: number
-  target_client_count?: number
-  target_guide_count?: number
+  target_clients_per_guide?: number
   notes?: string
   template?: number | null
   guides?: number[]
@@ -81,8 +79,7 @@ export type TripTemplateOption = {
     max_guests: number | null
     price_per_guest: string
   }>
-  target_client_count: number
-  target_guide_count: number
+  target_clients_per_guide: number | null
   notes: string
   is_active: boolean
 }

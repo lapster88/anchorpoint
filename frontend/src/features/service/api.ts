@@ -14,8 +14,7 @@ export type TripTemplate = {
     max_guests: number | null
     price_per_guest: string
   }>
-  target_client_count: number
-  target_guide_count: number
+  target_clients_per_guide: number | null
   notes: string
   is_active: boolean
   created_at: string
@@ -31,8 +30,7 @@ export type TripTemplatePayload = {
   is_deposit_required: boolean
   deposit_percent: string
   pricing_tiers: TripTemplate['pricing_tiers']
-  target_client_count: number
-  target_guide_count: number
+  target_clients_per_guide: number | null
   notes?: string
   is_active: boolean
 }

@@ -20,6 +20,7 @@ export type Trip = {
   assignments: TripAssignment[]
   requires_assignment: boolean
   pricing_snapshot?: TripPricingSnapshot | null
+  target_clients_per_guide?: number | null
 }
 
 export default function TripsList(){
@@ -86,6 +87,7 @@ export default function TripsList(){
         guide_service_name: detail.guide_service_name,
         assignments: detail.assignments,
         requires_assignment: detail.requires_assignment,
+        target_clients_per_guide: detail.target_clients_per_guide,
         pricing_snapshot: detail.pricing_snapshot,
       }
     })
@@ -128,6 +130,7 @@ export default function TripsList(){
               guide_service_name: tripDetail.guide_service_name,
               assignments: tripDetail.assignments,
               requires_assignment: tripDetail.requires_assignment,
+              target_clients_per_guide: tripDetail.target_clients_per_guide,
               pricing_snapshot: tripDetail.pricing_snapshot,
             })
           }}
@@ -179,6 +182,7 @@ export default function TripsList(){
             guide_service_name: selectedTrip.guide_service_name,
             assignments: selectedTrip.assignments,
             requires_assignment: selectedTrip.requires_assignment,
+            target_clients_per_guide: selectedTrip.target_clients_per_guide,
             pricing_snapshot: selectedTrip.pricing_snapshot,
           }}
           onClose={() => setSelectedTrip(null)}

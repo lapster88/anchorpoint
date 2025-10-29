@@ -32,8 +32,7 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
   const [price, setPrice] = useState('')
   const [description, setDescription] = useState('')
   const [durationHours, setDurationHours] = useState('')
-  const [targetClients, setTargetClients] = useState('')
-  const [targetGuides, setTargetGuides] = useState('')
+  const [targetGuestsPerGuide, setTargetGuestsPerGuide] = useState('')
   const [notes, setNotes] = useState('')
   const [guides, setGuides] = useState<GuideOption[]>([])
   const [selectedGuideIds, setSelectedGuideIds] = useState<number[]>([])
@@ -154,15 +153,15 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
     } else if (selectedTemplate) {
       payload.duration_hours = selectedTemplate.duration_hours
     }
-    if (!selectedTemplate && targetClients.trim()) {
-      payload.target_client_count = Number(targetClients)
-    } else if (selectedTemplate) {
-      payload.target_client_count = selectedTemplate.target_client_count
-    }
-    if (!selectedTemplate && targetGuides.trim()) {
-      payload.target_guide_count = Number(targetGuides)
-    } else if (selectedTemplate) {
-      payload.target_guide_count = selectedTemplate.target_guide_count
+    if (!selectedTemplate && targetGuestsPerGuide.trim()) {
+      const ratioNumber = Number(targetGuestsPerGuide)
+      if (Number.isNaN(ratioNumber) || ratioNumber <= 0) {
+        setError('Target guests per guide must be greater than zero if provided.')
+        return
+      }
+      payload.target_clients_per_guide = ratioNumber
+    } else if (selectedTemplate && selectedTemplate.target_clients_per_guide) {
+      payload.target_clients_per_guide = selectedTemplate.target_clients_per_guide
     }
     if (notes.trim()) {
       payload.notes = notes.trim()
@@ -181,8 +180,7 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
       setSelectedGuideIds([])
       setSelectedTemplateId('')
       setDurationHours('')
-      setTargetClients('')
-      setTargetGuides('')
+      setTargetGuestsPerGuide('')
       setNotes('')
       setPrice('')
       manualPriceRef.current = ''
@@ -223,8 +221,9 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
     setTitle(selectedTemplate.title)
     setLocation(selectedTemplate.location)
     setDurationHours(String(selectedTemplate.duration_hours || ''))
-    setTargetClients(String(selectedTemplate.target_client_count || ''))
-    setTargetGuides(String(selectedTemplate.target_guide_count || ''))
+    setTargetGuestsPerGuide(
+      selectedTemplate.target_clients_per_guide ? String(selectedTemplate.target_clients_per_guide) : ''
+    )
     setNotes(selectedTemplate.notes || '')
   }, [selectedTemplate, selectedTemplateId])
 
@@ -285,8 +284,7 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
               setSelectedTemplateId(value)
               if (!value) {
                 setDurationHours('')
-                setTargetClients('')
-                setTargetGuides('')
+                setTargetGuestsPerGuide('')
                 setNotes('')
                 if (manualPriceRef.current){
                   setPrice(manualPriceRef.current)
@@ -328,7 +326,7 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
           <DateTimeField label="End" value={end} onChange={setEnd} required />
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2">
           <TextField
             label="Duration (hours)"
             value={durationHours}
@@ -337,22 +335,18 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
             type="number"
             min={1}
           />
-          <TextField
-            label="Clients per trip"
-            value={targetClients}
-            onChange={setTargetClients}
-            required={!selectedTemplate}
-            type="number"
-            min={1}
-          />
-          <TextField
-            label="Guides per trip"
-            value={targetGuides}
-            onChange={setTargetGuides}
-            required={!selectedTemplate}
-            type="number"
-            min={1}
-          />
+          <div>
+            <TextField
+              label="Target guests per guide (optional)"
+              value={targetGuestsPerGuide}
+              onChange={setTargetGuestsPerGuide}
+              type="number"
+              min={1}
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Guides use this to plan staffing; it&apos;s a goal, not a hard requirement.
+            </p>
+          </div>
         </div>
 
         {selectedTemplate && (

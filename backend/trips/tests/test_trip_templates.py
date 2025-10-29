@@ -24,8 +24,7 @@ def _template_payload(service_id):
         "is_deposit_required": True,
         "deposit_percent": "25.00",
         "pricing_tiers": TIERS,
-        "target_client_count": 6,
-        "target_guide_count": 2,
+        "target_clients_per_guide": 3,
         "notes": "Bring glacier kits.",
         "is_active": True,
     }
@@ -73,6 +72,7 @@ def test_owner_creates_trip_template_via_api(owner, service):
     data = response.json()
     assert data["pricing_currency"] == "usd"
     assert len(data["pricing_tiers"]) == 2
+    assert data["target_clients_per_guide"] == 3
 
     template = TripTemplate.objects.get(id=data["id"])
     assert template.is_deposit_required is True
@@ -122,8 +122,7 @@ def test_duplicate_template(owner, service):
         is_deposit_required=True,
         deposit_percent=25,
         pricing_tiers=TIERS,
-        target_client_count=6,
-        target_guide_count=2,
+        target_clients_per_guide=3,
         notes="Bring glacier kits.",
         created_by=owner,
     )
@@ -148,8 +147,7 @@ def template(owner, service):
         is_deposit_required=True,
         deposit_percent=25,
         pricing_tiers=TIERS,
-        target_client_count=6,
-        target_guide_count=2,
+        target_clients_per_guide=3,
         notes="Bring glacier kits.",
         created_by=owner,
     )

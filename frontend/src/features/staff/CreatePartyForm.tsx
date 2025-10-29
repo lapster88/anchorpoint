@@ -15,6 +15,7 @@ export type TripSummary = {
   guide_service?: number
   guide_service_name?: string
   pricing_snapshot?: TripPricingSnapshot | null
+  target_clients_per_guide?: number | null
 }
 
 type Props = {

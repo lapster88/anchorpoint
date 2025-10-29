@@ -41,8 +41,7 @@ type TemplateForm = {
   depositRequired: boolean
   depositPercent: string
   tiers: TierForm[]
-  targetClients: string
-  targetGuides: string
+  targetGuestsPerGuide: string
   notes: string
   isActive: boolean
 }
@@ -178,8 +177,8 @@ export default function ServiceTemplatesCard({ membership }: Props){
                   )}
                 </h4>
                 <p className="text-xs text-slate-500">
-                  Location: {template.location} · Duration: {template.duration_hours}h · Ratio:{' '}
-                  {template.target_client_count}:{template.target_guide_count}
+                  Location: {template.location} · Duration: {template.duration_hours}h · Target guests per guide:{' '}
+                  {template.target_clients_per_guide ?? '—'}
                 </p>
                 <p className="text-xs text-slate-500">
                   First tier: {template.pricing_tiers.length ? formatCurrency(template.pricing_tiers[0].price_per_guest, template.pricing_currency) : '—'}
@@ -376,7 +375,7 @@ function TemplateModal({ mode, template, isSaving, error, onClose, onSubmit }: T
             </label>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             <label className="text-sm font-medium text-slate-700">
               Duration (hours)
               <input
@@ -389,26 +388,19 @@ function TemplateModal({ mode, template, isSaving, error, onClose, onSubmit }: T
               />
             </label>
             <label className="text-sm font-medium text-slate-700">
-              Clients per trip
+              Target guests per guide (optional)
               <input
-                required
                 type="number"
                 min={1}
                 className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-                value={form.targetClients}
-                onChange={(event) => setForm((prev) => ({ ...prev, targetClients: event.target.value }))}
+                value={form.targetGuestsPerGuide}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, targetGuestsPerGuide: event.target.value }))
+                }
               />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
-              Guides per trip
-              <input
-                required
-                type="number"
-                min={1}
-                className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-                value={form.targetGuides}
-                onChange={(event) => setForm((prev) => ({ ...prev, targetGuides: event.target.value }))}
-              />
+              <span className="mt-1 block text-xs text-slate-500">
+                Helps communicate staffing goals. Guides can exceed this ratio when needed.
+              </span>
             </label>
           </div>
 
@@ -579,8 +571,7 @@ function toForm(template?: TripTemplate): TemplateForm {
       tiers: [
         { minGuests: 1, maxGuests: '', pricePerGuest: '' }
       ],
-      targetClients: '',
-      targetGuides: '',
+      targetGuestsPerGuide: '',
       notes: '',
       isActive: true
     }
@@ -602,8 +593,9 @@ function toForm(template?: TripTemplate): TemplateForm {
     depositRequired: template.is_deposit_required,
     depositPercent: String(template.deposit_percent ?? '0'),
     tiers,
-    targetClients: template.target_client_count ? String(template.target_client_count) : '',
-    targetGuides: template.target_guide_count ? String(template.target_guide_count) : '',
+    targetGuestsPerGuide: template.target_clients_per_guide
+      ? String(template.target_clients_per_guide)
+      : '',
     notes: template.notes || '',
     isActive: template.is_active
   }
@@ -613,8 +605,12 @@ function validateForm(form: TemplateForm): string | null {
   if (!form.title.trim()) return 'Title is required.'
   if (!form.location.trim()) return 'Location is required.'
   if (!form.durationHours.trim() || Number(form.durationHours) < 1) return 'Duration must be at least 1 hour.'
-  if (!form.targetClients.trim() || Number(form.targetClients) < 1) return 'Clients per trip must be at least 1.'
-  if (!form.targetGuides.trim() || Number(form.targetGuides) < 1) return 'Guides per trip must be at least 1.'
+  if (form.targetGuestsPerGuide.trim()){
+    const ratio = Number(form.targetGuestsPerGuide)
+    if (Number.isNaN(ratio) || ratio < 1) {
+      return 'Target guests per guide must be at least 1 when provided.'
+    }
+  }
   if (!form.tiers.length) return 'Add at least one pricing tier.'
 
   for (let i = 0; i < form.tiers.length; i += 1){
@@ -659,8 +655,9 @@ function toPayload(form: TemplateForm): Omit<TripTemplatePayload, 'service'> {
       max_guests: parsePositiveInt(tier.maxGuests),
       price_per_guest: String(tier.pricePerGuest)
     })),
-    target_client_count: Number(form.targetClients || '0'),
-    target_guide_count: Number(form.targetGuides || '0'),
+    target_clients_per_guide: form.targetGuestsPerGuide.trim()
+      ? Number(form.targetGuestsPerGuide)
+      : null,
     notes: form.notes.trim(),
     is_active: form.isActive
   }
