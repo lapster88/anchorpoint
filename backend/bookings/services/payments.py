@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from django.conf import settings
 
-from bookings.models import Booking
+from bookings.models import TripParty
 from payments.models import Payment
 
 
@@ -26,18 +26,18 @@ class CheckoutSessionStub:
     url: str
 
 
-def build_checkout_preview_url(*, booking: Booking, amount_cents: int, session_id: str) -> str:
+def build_checkout_preview_url(*, party: TripParty, amount_cents: int, session_id: str) -> str:
     return (
         f"{settings.FRONTEND_URL.rstrip('/')}/payments/preview?"
-        f"booking={booking.id}&amount={amount_cents}&session={session_id}"
+        f"booking={party.id}&amount={amount_cents}&session={session_id}"
     )
 
 
-def _stub_checkout_session(*, booking: Booking, amount_cents: int) -> CheckoutSessionStub:
+def _stub_checkout_session(*, party: TripParty, amount_cents: int) -> CheckoutSessionStub:
     session_id = f"cs_test_{uuid4().hex}"
     payment_intent = f"pi_test_{uuid4().hex}"
     preview_url = build_checkout_preview_url(
-        booking=booking,
+        party=party,
         amount_cents=amount_cents,
         session_id=session_id,
     )
@@ -60,7 +60,7 @@ def _should_use_stub() -> bool:
     return _get_stripe_api_key() is None
 
 
-def create_checkout_session(*, booking: Booking, amount_cents: int):
+def create_checkout_session(*, party: TripParty, amount_cents: int):
     """
     Create a Stripe Checkout session (or stub equivalent) for a booking.
 
@@ -69,7 +69,7 @@ def create_checkout_session(*, booking: Booking, amount_cents: int):
     """
 
     if _should_use_stub():
-        return _stub_checkout_session(booking=booking, amount_cents=amount_cents)
+        return _stub_checkout_session(party=party, amount_cents=amount_cents)
 
     import stripe
 
@@ -78,7 +78,7 @@ def create_checkout_session(*, booking: Booking, amount_cents: int):
         raise RuntimeError("Stripe secret key is not configured.")
 
     stripe.api_key = api_key
-    service = booking.trip.guide_service
+    service = party.trip.guide_service
     stripe_kwargs = {}
     if getattr(service, "billing_stripe_account", ""):
         stripe_kwargs["stripe_account"] = service.billing_stripe_account
@@ -93,24 +93,24 @@ def create_checkout_session(*, booking: Booking, amount_cents: int):
                     "currency": "usd",
                     "unit_amount": amount_cents,
                     "product_data": {
-                        "name": booking.trip.title,
+                        "name": party.trip.title,
                     },
                 },
             }
         ],
-        success_url=f"{settings.FRONTEND_URL}/payment/success?booking={booking.id}",
-        cancel_url=f"{settings.FRONTEND_URL}/payment/cancel?booking={booking.id}",
+        success_url=f"{settings.FRONTEND_URL}/payment/success?booking={party.id}",
+        cancel_url=f"{settings.FRONTEND_URL}/payment/cancel?booking={party.id}",
         metadata={
-            "booking_id": booking.id,
-            "trip_id": booking.trip_id,
-            "guide_service_id": booking.trip.guide_service_id,
+            "booking_id": party.id,
+            "trip_id": party.trip_id,
+            "guide_service_id": party.trip.guide_service_id,
         },
         **stripe_kwargs,
     )
     return session
 
 
-def get_latest_payment_preview_url(booking: Booking) -> str | None:
+def get_latest_payment_preview_url(party: TripParty) -> str | None:
     """
     Recreate the stub preview link from the most recent payment record when Stripe is stubbed.
     """
@@ -118,12 +118,12 @@ def get_latest_payment_preview_url(booking: Booking) -> str | None:
     if not _should_use_stub():
         return None
 
-    payment: Payment | None = booking.payments.order_by("-created_at").first()
+    payment: Payment | None = party.payments.order_by("-created_at").first()
     if not payment or not payment.stripe_checkout_session:
         return None
 
     return build_checkout_preview_url(
-        booking=booking,
+        party=party,
         amount_cents=payment.amount_cents,
         session_id=payment.stripe_checkout_session,
     )

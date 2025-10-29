@@ -13,7 +13,8 @@ export default function GuestsDirectoryPage(){
   })
 
   const linkMutation = useMutation({
-    mutationFn: (guestId: number) => requestGuestLink({ guest_id: guestId }),
+    mutationFn: ({ guestId, partyId }: { guestId: number; partyId: number }) =>
+      requestGuestLink({ guest_id: guestId, party_id: partyId }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['staff-guests'] })
   })
 
@@ -46,8 +47,8 @@ export default function GuestsDirectoryPage(){
           <GuestCard
             key={guest.id}
             guest={guest}
-            onSendLink={() => linkMutation.mutate(guest.id)}
-            sending={linkMutation.isLoading}
+            onSendLink={(partyId) => linkMutation.mutate({ guestId: guest.id, partyId })}
+            sending={linkMutation.isPending}
           />
         ))}
         {!isLoading && !guests.length && (
@@ -60,27 +61,17 @@ export default function GuestsDirectoryPage(){
 
 type GuestCardProps = {
   guest: GuestProfile
-  onSendLink: () => void
+  onSendLink: (partyId: number) => void
   sending: boolean
 }
 
 function GuestCard({ guest, onSendLink, sending }: GuestCardProps){
   return (
     <article className="border rounded bg-white shadow-sm p-4 space-y-3">
-      <div className="flex justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">{guest.full_name || guest.email}</h2>
-          <p className="text-sm text-gray-600">{guest.email}</p>
-          {guest.phone && <p className="text-sm text-gray-600">Phone: {guest.phone}</p>}
-        </div>
-        <button
-          type="button"
-          className="text-sm text-blue-600 underline disabled:opacity-50"
-          onClick={onSendLink}
-          disabled={sending}
-        >
-          {sending ? 'Sending…' : 'Email guest link'}
-        </button>
+      <div>
+        <h2 className="text-lg font-semibold">{guest.full_name || guest.email}</h2>
+        <p className="text-sm text-gray-600">{guest.email}</p>
+        {guest.phone && <p className="text-sm text-gray-600">Phone: {guest.phone}</p>}
       </div>
 
       {guest.parties?.length ? (
@@ -96,6 +87,16 @@ function GuestCard({ guest, onSendLink, sending }: GuestCardProps){
                 <p className="text-xs text-gray-600">
                   Payment: {party.payment_status} · Waiver: {party.waiver_status} · Info: {party.info_status}
                 </p>
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    className="text-xs text-blue-600 underline disabled:opacity-50"
+                    onClick={() => onSendLink(party.id)}
+                    disabled={sending}
+                  >
+                    {sending ? 'Sending…' : 'Email guest link'}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

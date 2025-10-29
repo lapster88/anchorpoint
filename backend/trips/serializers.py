@@ -1,16 +1,18 @@
 from rest_framework import serializers
 
 from accounts.models import ServiceMembership, User
-from bookings.serializers import BookingCreateSerializer, TripPartySerializer
+from bookings.serializers import TripPartyCreateSerializer, TripPartySerializer
 from .models import Trip, Assignment, TripTemplate
+from .pricing import build_single_tier_snapshot
 
 
 class TripSerializer(serializers.ModelSerializer):
-    parties = TripPartySerializer(many=True, read_only=True, source="bookings")
+    parties = TripPartySerializer(many=True, read_only=True)
     guide_service_name = serializers.CharField(source="guide_service.name", read_only=True)
     assignments = serializers.SerializerMethodField()
     requires_assignment = serializers.SerializerMethodField()
     template_id = serializers.IntegerField(source="template_used_id", read_only=True)
+    price_cents = serializers.IntegerField(min_value=1, required=False)
 
     class Meta:
         model = Trip
@@ -25,13 +27,13 @@ class TripSerializer(serializers.ModelSerializer):
             "price_cents",
             "difficulty",
             "description",
-             "duration_hours",
-             "target_client_count",
-             "target_guide_count",
-             "notes",
-             "pricing_snapshot",
-             "template_id",
-             "template_snapshot",
+            "duration_hours",
+            "target_client_count",
+            "target_guide_count",
+            "notes",
+            "pricing_snapshot",
+            "template_id",
+            "template_snapshot",
             "parties",
             "assignments",
             "requires_assignment",
@@ -44,7 +46,6 @@ class TripSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "title": {"required": False},
             "location": {"required": False},
-            "price_cents": {"required": False},
         }
 
     def get_assignments(self, obj: Trip):
@@ -65,7 +66,7 @@ class TripSerializer(serializers.ModelSerializer):
 
 
 class TripCreateSerializer(TripSerializer):
-    party = BookingCreateSerializer(write_only=True)
+    party = TripPartyCreateSerializer(write_only=True)
     guides = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.all(), many=True, required=False, allow_empty=True
     )
@@ -84,6 +85,7 @@ class TripCreateSerializer(TripSerializer):
         party_data = validated_data.pop("party")
         guides = validated_data.pop("guides", [])
         template = validated_data.pop("template", None)
+        price_cents = validated_data.pop("price_cents", None)
 
         if template is not None:
             validated_data["template_used"] = template
@@ -100,13 +102,13 @@ class TripCreateSerializer(TripSerializer):
             snapshot = template.to_snapshot()
             pricing_snapshot = snapshot.get("pricing")
             validated_data["pricing_snapshot"] = pricing_snapshot
-            base_price = _snapshot_base_price_cents(pricing_snapshot)
-            if base_price is not None:
-                validated_data["price_cents"] = base_price
+        else:
+            if price_cents is None:
+                raise serializers.ValidationError({"price_cents": "Price per guest is required."})
+            validated_data["pricing_snapshot"] = build_single_tier_snapshot(price_cents)
 
         trip = super().create(validated_data)
         self.context["party_data"] = party_data
-        # Preserve unique guides in insertion order for the view to apply afterwards.
         seen = set()
         ordered_guides = []
         for guide in guides:
@@ -121,12 +123,12 @@ class TripCreateSerializer(TripSerializer):
         guides = attrs.get("guides") or []
         service = attrs.get("guide_service")
         template = attrs.get("template")
+        price_cents = attrs.get("price_cents")
 
         if template and service and template.service_id != service.id:
             raise serializers.ValidationError({"template": "Template must belong to the same guide service."})
         if template and not template.is_active:
             raise serializers.ValidationError({"template": "Template is no longer active."})
-        price_cents = attrs.get("price_cents")
         if template is None and price_cents in (None, "", 0):
             raise serializers.ValidationError({"price_cents": "Price per guest is required when no template pricing is selected."})
         if not template:
@@ -190,7 +192,6 @@ class TripTemplateSerializer(serializers.ModelSerializer):
         if not tiers:
             raise serializers.ValidationError({"pricing_tiers": "At least one tier is required."})
 
-        # Ensure tiers are contiguous, start at 1, and final tier open-ended
         sorted_tiers = sorted(tiers, key=lambda t: t.get("min_guests") or 0)
         last_max = 0
         for index, tier in enumerate(sorted_tiers):
@@ -221,22 +222,3 @@ class TripTemplateSerializer(serializers.ModelSerializer):
             if attrs.get("is_deposit_required") and deposit == 0:
                 raise serializers.ValidationError({"deposit_percent": "Deposit percent must be greater than 0 when a deposit is required."})
         return attrs
-
-
-def _snapshot_base_price_cents(snapshot: dict) -> int | None:
-    if not snapshot:
-        return None
-    tiers = snapshot.get("tiers")
-    if not tiers:
-        return None
-    first = tiers[0]
-    cents = first.get("price_per_guest_cents")
-    if cents is not None:
-        return cents
-    price = first.get("price_per_guest")
-    if price is None:
-        return None
-    try:
-        return int(round(float(price) * 100))
-    except (TypeError, ValueError):
-        return None

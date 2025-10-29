@@ -3,16 +3,17 @@ from datetime import timedelta
 from django.conf import settings
 from django.db.models import Sum
 from rest_framework import permissions, status, viewsets
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from accounts.models import ServiceMembership, User
-from bookings.models import Booking, BookingGuest
+from bookings.models import TripParty, TripPartyGuest
 from bookings.serializers import (
-    BookingCreateSerializer,
-    BookingResponseSerializer,
+    TripPartyCreateSerializer,
+    TripPartyResponseSerializer,
     TripPartySerializer,
+    TripPartyUpdateSerializer,
 )
 from bookings.services.emails import send_booking_confirmation_email
 from bookings.services.guest_tokens import issue_guest_access_token
@@ -20,6 +21,7 @@ from bookings.services.guests import upsert_guest_profile
 from bookings.services.payments import create_checkout_session
 from payments.models import Payment
 from .models import Trip, Assignment, TripTemplate
+from .pricing import select_price_per_guest_cents
 from .serializers import (
     TripSerializer,
     TripCreateSerializer,
@@ -29,16 +31,8 @@ from .serializers import (
 
 
 def _price_per_guest_cents(trip: Trip, party_size: int) -> int:
-    snapshot = trip.pricing_snapshot or {}
-    tiers = snapshot.get("tiers") or []
-    if tiers:
-        for tier in tiers:
-            max_guests = tier.get("max_guests")
-            if max_guests is None or party_size <= max_guests:
-                return tier.get("price_per_guest_cents") or trip.price_cents
-        # Fallback to last tier if none matched due to data issues
-        return tiers[-1].get("price_per_guest_cents") or trip.price_cents
-    return trip.price_cents
+    cents = select_price_per_guest_cents(trip.pricing_snapshot, party_size, default=trip.price_cents)
+    return cents or trip.price_cents
 
 
 def _calculate_amount_cents(trip: Trip, party_size: int) -> int:
@@ -51,14 +45,14 @@ class TripViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     filterset_fields = ["guide_service", "start", "end"]
     search_fields = ["title", "location", "description"]
-    ordering_fields = ["start", "end", "price_cents"]
+    ordering_fields = ["start", "end"]
 
     def get_queryset(self):
         user = self.request.user
         base_queryset = Trip.objects.all().order_by("start").prefetch_related(
-            "bookings__primary_guest",
-            "bookings__booking_guests__guest",
-            "bookings__payments",
+            "parties__primary_guest",
+            "parties__party_guests__guest",
+            "parties__payments",
             "assignments__guide",
         )
 
@@ -77,7 +71,6 @@ class TripViewSet(viewsets.ModelViewSet):
         if memberships.filter(role=ServiceMembership.GUIDE).exists():
             return base_queryset.filter(assignments__guide=user).distinct()
 
-        # Other roles do not see trips by default.
         return base_queryset.none()
 
     def _user_can_manage_trip(self, user, trip: Trip) -> bool:
@@ -95,34 +88,33 @@ class TripViewSet(viewsets.ModelViewSet):
             return TripCreateSerializer
         return super().get_serializer_class()
 
-    def _create_party_instance(self, *, trip, party_data):
-        payload = party_data
-
-        primary_guest = upsert_guest_profile(payload["primary_guest"])
-        additional_guests_data = payload.get("additional_guests", [])
+    def _create_party_instance(self, *, trip: Trip, party_data: dict) -> TripParty:
+        primary_guest = upsert_guest_profile(party_data["primary_guest"])
+        additional_guests_data = party_data.get("additional_guests", [])
         additional_guests = [upsert_guest_profile(guest_data) for guest_data in additional_guests_data]
         guests = [primary_guest] + additional_guests
 
-        requested_party_size = payload.get("party_size") or len(guests)
+        requested_party_size = party_data.get("party_size") or len(guests)
         party_size = max(requested_party_size, len(guests))
 
-        booking = Booking.objects.create(
+        party = TripParty.objects.create(
             trip=trip,
             primary_guest=primary_guest,
             party_size=party_size,
-            payment_status=Booking.PENDING,
-            info_status=Booking.INFO_PENDING,
-            waiver_status=Booking.WAIVER_PENDING,
+            payment_status=TripParty.PENDING,
+            info_status=TripParty.INFO_PENDING,
+            waiver_status=TripParty.WAIVER_PENDING,
         )
-        BookingGuest.objects.create(booking=booking, guest=primary_guest, is_primary=True)
+
+        TripPartyGuest.objects.create(party=party, guest=primary_guest, is_primary=True)
         for guest in additional_guests:
-            BookingGuest.objects.get_or_create(booking=booking, guest=guest, defaults={"is_primary": False})
+            TripPartyGuest.objects.get_or_create(party=party, guest=guest, defaults={"is_primary": False})
 
         amount_cents = _calculate_amount_cents(trip, party_size)
-        checkout_session = create_checkout_session(booking=booking, amount_cents=amount_cents)
+        checkout_session = create_checkout_session(party=party, amount_cents=amount_cents)
 
         Payment.objects.create(
-            booking=booking,
+            party=party,
             amount_cents=amount_cents,
             currency="usd",
             stripe_payment_intent=checkout_session.payment_intent,
@@ -133,7 +125,7 @@ class TripViewSet(viewsets.ModelViewSet):
         expires_at = trip.end + timedelta(days=1)
         _, raw_token = issue_guest_access_token(
             guest=primary_guest,
-            booking=booking,
+            party=party,
             expires_at=expires_at,
             single_use=False,
         )
@@ -143,15 +135,15 @@ class TripViewSet(viewsets.ModelViewSet):
         recipient_emails = [guest.email for guest in guests if guest.email]
         if recipient_emails:
             send_booking_confirmation_email(
-                booking=booking,
+                party=party,
                 payment_url=payment_url,
                 guest_portal_url=guest_portal_url,
                 recipients=recipient_emails,
             )
 
-        booking._payment_url = payment_url
-        booking._guest_portal_url = guest_portal_url
-        return booking
+        party._payment_url = payment_url
+        party._guest_portal_url = guest_portal_url
+        return party
 
     @action(detail=True, methods=["post", "get"], url_path="parties")
     def parties(self, request, pk=None):
@@ -160,20 +152,57 @@ class TripViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Not permitted."}, status=status.HTTP_403_FORBIDDEN)
 
         if request.method.lower() == "get":
-            bookings = (
-                trip.bookings.select_related("primary_guest")
-                .prefetch_related("booking_guests__guest", "payments")
+            parties = (
+                trip.parties.select_related("primary_guest")
+                .prefetch_related("party_guests__guest", "payments")
                 .order_by("created_at")
             )
-            serializer = TripPartySerializer(bookings, many=True)
+            serializer = TripPartySerializer(parties, many=True)
             return Response({"parties": serializer.data})
 
-        serializer = BookingCreateSerializer(data=request.data)
+        serializer = TripPartyCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        booking = self._create_party_instance(trip=trip, party_data=serializer.validated_data)
+        party = self._create_party_instance(trip=trip, party_data=serializer.validated_data)
 
-        response_serializer = BookingResponseSerializer(booking)
+        response_serializer = TripPartyResponseSerializer(party)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["patch"], url_path="parties/(?P<party_id>[^/.]+)")
+    def update_party(self, request, pk=None, party_id=None):
+        trip = self.get_object()
+        if not self._user_can_manage_trip(request.user, trip):
+            return Response({"detail": "Not permitted."}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            party = trip.parties.select_related("trip").prefetch_related("party_guests__guest").get(id=party_id)
+        except TripParty.DoesNotExist:
+            return Response({"detail": "Party not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = TripPartyUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+
+        party_size = serializer.validated_data.get("party_size")
+        if party_size is not None:
+            min_guests = party.party_guests.count()
+            if party_size < max(min_guests, 1):
+                return Response(
+                    {"party_size": f"Party size must be at least {min_guests} to cover confirmed guests."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            party.party_size = party_size
+            party.save(update_fields=["party_size"])
+
+            if party.payment_status == TripParty.PENDING:
+                amount_cents = _calculate_amount_cents(trip, party.party_size)
+                latest_payment = party.payments.order_by("-created_at").first()
+                if latest_payment:
+                    status_value = (latest_payment.status or "").lower()
+                    if status_value in {"unpaid", "open", "requires_payment_method", "pending"}:
+                        latest_payment.amount_cents = amount_cents
+                        latest_payment.save(update_fields=["amount_cents"])
+
+        response_serializer = TripPartySerializer(party)
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["get"], url_path="service/(?P<service_id>[^/.]+)/guides")
     def service_guides(self, request, service_id=None):
@@ -204,22 +233,21 @@ class TripViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         trip = serializer.save()
         party_data = serializer.context.get("party_data")
-        guide = serializer.context.get("guide")
 
         if party_data is None:
             trip.delete()
             return Response({"detail": "A party is required when creating a trip."}, status=status.HTTP_400_BAD_REQUEST)
 
-        party_serializer = BookingCreateSerializer(data=party_data)
+        party_serializer = TripPartyCreateSerializer(data=party_data)
         party_serializer.is_valid(raise_exception=True)
 
-        booking = self._create_party_instance(trip=trip, party_data=party_serializer.validated_data)
+        party = self._create_party_instance(trip=trip, party_data=party_serializer.validated_data)
 
         guides = serializer.context.get("guides", [])
         self._replace_assignments(trip, guides)
 
         if not trip.title.strip():
-            primary_guest = booking.primary_guest
+            primary_guest = party.primary_guest
             fallback_title = primary_guest.full_name or primary_guest.email or "Private Trip"
             Trip.objects.filter(pk=trip.pk).update(title=fallback_title)
 
@@ -371,8 +399,7 @@ class TripTemplateViewSet(viewsets.ModelViewSet):
             is_active=False,
             created_by=request.user,
         )
-
-        serializer = self.get_serializer(duplicate)
+        serializer = TripTemplateSerializer(duplicate, context=self.get_serializer_context())
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def _generate_copy_title(self, template: TripTemplate) -> str:

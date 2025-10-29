@@ -5,6 +5,7 @@ from rest_framework.test import APIClient
 from accounts.models import ServiceMembership, User
 from orgs.models import GuideService
 from trips.models import Assignment, Trip
+from trips.pricing import build_single_tier_snapshot
 
 
 @pytest.fixture
@@ -34,7 +35,7 @@ def _create_trip(service, title, start_offset_days=0):
         location="Somewhere",
         start=start,
         end=end,
-        price_cents=50000,
+        pricing_snapshot=build_single_tier_snapshot(50000),
     )
 
 

@@ -4,10 +4,11 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.models import ServiceMembership, User
-from bookings.models import Booking, BookingGuest, GuestProfile
+from bookings.models import TripParty, TripPartyGuest, GuestProfile
 from bookings.services.guest_tokens import issue_guest_access_token
 from orgs.models import GuideService
 from trips.models import Trip
+from trips.pricing import build_single_tier_snapshot
 
 
 @pytest.fixture
@@ -37,11 +38,11 @@ def booking(db, service):
         location="Alps",
         start=timezone.now() + timezone.timedelta(days=5),
         end=timezone.now() + timezone.timedelta(days=6),
-        price_cents=50000,
+        pricing_snapshot=build_single_tier_snapshot(50000),
     )
-    booking = Booking.objects.create(trip=trip, primary_guest=guest, party_size=2)
-    BookingGuest.objects.create(booking=booking, guest=guest, is_primary=True)
-    return booking
+    party = TripParty.objects.create(trip=trip, primary_guest=guest, party_size=2)
+    TripPartyGuest.objects.create(party=party, guest=guest, is_primary=True)
+    return party
 
 
 @pytest.mark.django_db
@@ -62,7 +63,7 @@ def test_staff_can_request_guest_link(staff_user, booking):
 
     response = client.post(
         "/api/guest-links/",
-        {"guest_id": booking.primary_guest_id, "booking_id": booking.id, "ttl_hours": 48},
+        {"guest_id": booking.primary_guest_id, "party_id": booking.id, "ttl_hours": 48},
         format="json",
     )
     assert response.status_code == 201
@@ -72,7 +73,7 @@ def test_staff_can_request_guest_link(staff_user, booking):
 def test_guest_can_update_profile_via_token(booking):
     token_obj, raw = issue_guest_access_token(
         guest=booking.primary_guest,
-        booking=booking,
+        party=booking,
         expires_at=booking.trip.end + timezone.timedelta(days=1),
         single_use=True,
     )
@@ -88,6 +89,6 @@ def test_guest_can_update_profile_via_token(booking):
     booking.refresh_from_db()
     booking.primary_guest.refresh_from_db()
     assert booking.primary_guest.phone == "555-1010"
-    assert booking.info_status == Booking.INFO_COMPLETE
+    assert booking.info_status == TripParty.INFO_COMPLETE
     token_obj.refresh_from_db()
     assert token_obj.used_at is not None

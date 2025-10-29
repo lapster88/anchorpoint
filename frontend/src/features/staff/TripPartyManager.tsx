@@ -11,7 +11,9 @@ import {
   listServiceGuides,
   assignGuides,
   GuideOption,
+  TripPricingSnapshot,
 } from '../trips/api'
+import { formatCurrencyFromCents, snapshotBasePriceCents } from '../trips/pricing'
 
 type Props = {
   trip: TripSummary
@@ -69,16 +71,24 @@ export default function TripPartyManager({ trip, onClose, canEditAssignments, se
   const title = tripMeta?.title ?? trip.title
   const locationLabel = tripMeta?.location ?? trip.location
   const startDate = new Date(tripMeta?.start ?? trip.start)
-  const priceCents = tripMeta?.price_cents ?? trip.price_cents
-  const priceLabel = `$${(priceCents / 100).toFixed(2)} per guest`
+  const pricingSnapshot: TripPricingSnapshot | null = tripMeta?.pricing_snapshot ?? trip.pricing_snapshot ?? null
+  const basePriceCents =
+    snapshotBasePriceCents(pricingSnapshot, tripMeta?.price_cents ?? trip.price_cents) ??
+    tripMeta?.price_cents ??
+    trip.price_cents
+  const priceLabelCurrency = pricingSnapshot?.currency ?? 'USD'
+  const priceLabelAmount =
+    formatCurrencyFromCents(basePriceCents, priceLabelCurrency) ?? `$${(basePriceCents / 100).toFixed(2)}`
+  const priceLabel = `${priceLabelAmount} per guest`
   const formTrip = useMemo(() => ({
     id: trip.id,
     title,
     location: locationLabel,
     start: tripMeta?.start ?? trip.start,
     end: tripMeta?.end ?? trip.end,
-    price_cents: priceCents,
-  }), [trip.id, title, locationLabel, tripMeta?.start, tripMeta?.end, trip.start, trip.end, priceCents])
+    price_cents: tripMeta?.price_cents ?? trip.price_cents,
+    pricing_snapshot: pricingSnapshot,
+  }), [trip.id, title, locationLabel, tripMeta?.start, tripMeta?.end, trip.start, trip.end, tripMeta?.price_cents, trip.price_cents, pricingSnapshot])
   useEffect(() => {
     setSelectedGuideIds(assignments.map((assignment) => assignment.guide_id))
   }, [assignments])
@@ -263,7 +273,7 @@ export default function TripPartyManager({ trip, onClose, canEditAssignments, se
       {!isLoading && !error && (
         <div className="space-y-6">
           {hasParties ? (
-            <PartySummaryList parties={parties} />
+            <PartySummaryList parties={parties} currency={pricingSnapshot?.currency ?? 'USD'} />
           ) : (
             <div className="border border-dashed rounded-md p-4 bg-slate-50 text-sm text-gray-600">
               No parties yet. Create one to send payment and info links to your guests.
@@ -300,7 +310,7 @@ export default function TripPartyManager({ trip, onClose, canEditAssignments, se
   )
 }
 
-function PartySummaryList({ parties }: { parties: TripPartySummary[] }){
+function PartySummaryList({ parties, currency }: { parties: TripPartySummary[]; currency: string | null }){
   return (
     <div className="space-y-4">
       {parties.map(party => (
@@ -333,6 +343,21 @@ function PartySummaryList({ parties }: { parties: TripPartySummary[] }){
               ))}
             </ul>
           </div>
+
+          <dl className="grid sm:grid-cols-2 gap-3 text-sm">
+            <div className="space-y-1">
+              <dt className="text-xs uppercase tracking-wide text-gray-500">Price per guest</dt>
+              <dd className="text-sm font-medium text-gray-700">
+                {formatCurrencyFromCents(party.price_per_guest_cents, currency) ?? `$${Number(party.price_per_guest ?? 0).toFixed(2)}`}
+              </dd>
+            </div>
+            <div className="space-y-1">
+              <dt className="text-xs uppercase tracking-wide text-gray-500">Total due</dt>
+              <dd className="text-sm font-medium text-gray-700">
+                {formatCurrencyFromCents(party.total_amount_cents, currency) ?? `$${Number(party.total_amount ?? 0).toFixed(2)}`}
+              </dd>
+            </div>
+          </dl>
 
           {party.payment_preview_url && (
             <div className="text-sm">

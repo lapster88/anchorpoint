@@ -6,7 +6,7 @@ import { fetchMemberships, ServiceMembership } from '../profile/api'
 import TripPartyManager from '../staff/TripPartyManager'
 import CreateTripForm from './CreateTripForm'
 import TripGuideDetails from './TripGuideDetails'
-import { TripAssignment, TripDetail } from './api'
+import { TripAssignment, TripDetail, TripPricingSnapshot } from './api'
 
 export type Trip = {
   id: number
@@ -19,6 +19,7 @@ export type Trip = {
   guide_service_name: string
   assignments: TripAssignment[]
   requires_assignment: boolean
+  pricing_snapshot?: TripPricingSnapshot | null
 }
 
 export default function TripsList(){
@@ -85,6 +86,7 @@ export default function TripsList(){
         guide_service_name: detail.guide_service_name,
         assignments: detail.assignments,
         requires_assignment: detail.requires_assignment,
+        pricing_snapshot: detail.pricing_snapshot,
       }
     })
   }, [])
@@ -125,7 +127,8 @@ export default function TripsList(){
               guide_service: tripDetail.guide_service,
               guide_service_name: tripDetail.guide_service_name,
               assignments: tripDetail.assignments,
-              requires_assignment: tripDetail.requires_assignment
+              requires_assignment: tripDetail.requires_assignment,
+              pricing_snapshot: tripDetail.pricing_snapshot,
             })
           }}
         />
@@ -175,7 +178,8 @@ export default function TripsList(){
             guide_service: selectedTrip.guide_service,
             guide_service_name: selectedTrip.guide_service_name,
             assignments: selectedTrip.assignments,
-            requires_assignment: selectedTrip.requires_assignment
+            requires_assignment: selectedTrip.requires_assignment,
+            pricing_snapshot: selectedTrip.pricing_snapshot,
           }}
           onClose={() => setSelectedTrip(null)}
           canEditAssignments={canManageBookings}

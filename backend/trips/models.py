@@ -2,6 +2,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from .pricing import build_single_tier_snapshot, snapshot_base_price_cents
+
 
 class Trip(models.Model):
     guide_service = models.ForeignKey('orgs.GuideService', on_delete=models.CASCADE)
@@ -9,7 +11,6 @@ class Trip(models.Model):
     location = models.CharField(max_length=200)
     start = models.DateTimeField()
     end = models.DateTimeField()
-    price_cents = models.PositiveIntegerField()
     difficulty = models.CharField(max_length=50, blank=True)
     description = models.TextField(blank=True)
     duration_hours = models.PositiveIntegerField(null=True, blank=True)
@@ -28,6 +29,21 @@ class Trip(models.Model):
 
     def __str__(self):
         return f"{self.title} @ {self.location}"
+
+    @property
+    def price_cents(self) -> int:
+        base = snapshot_base_price_cents(self.pricing_snapshot)
+        return base or 0
+
+    def update_single_tier_pricing(self, price_cents: int, *, currency: str | None = None):
+        current = self.pricing_snapshot or {}
+        snapshot = build_single_tier_snapshot(
+            price_cents,
+            currency=currency or current.get("currency") or "usd",
+            is_deposit_required=current.get("is_deposit_required") or False,
+            deposit_percent=current.get("deposit_percent") or "0",
+        )
+        self.pricing_snapshot = snapshot
 
     def clean(self):
         super().clean()

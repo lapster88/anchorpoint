@@ -5,10 +5,11 @@ import pytest
 import stripe
 from django.utils import timezone
 
-from bookings.models import Booking, GuestProfile
+from bookings.models import TripParty, GuestProfile
 from bookings.services import payments
 from orgs.models import GuideService
 from trips.models import Trip
+from trips.pricing import build_single_tier_snapshot
 
 
 @pytest.fixture
@@ -26,20 +27,20 @@ def trip(db):
         location="Mt. Baker",
         start=start,
         end=end,
-        price_cents=18000,
+        pricing_snapshot=build_single_tier_snapshot(18000),
     )
 
 
 @pytest.fixture
 def booking(trip):
     guest = GuestProfile.objects.create(email="guest@example.com")
-    return Booking.objects.create(
+    return TripParty.objects.create(
         trip=trip,
         primary_guest=guest,
         party_size=1,
-        payment_status=Booking.PENDING,
-        info_status=Booking.INFO_PENDING,
-        waiver_status=Booking.WAIVER_PENDING,
+        payment_status=TripParty.PENDING,
+        info_status=TripParty.INFO_PENDING,
+        waiver_status=TripParty.WAIVER_PENDING,
     )
 
 
@@ -49,7 +50,7 @@ def test_checkout_stub_returns_preview_url(settings, booking):
     settings.STRIPE_SECRET_KEY = ""
     settings.FRONTEND_URL = "https://app.test"
 
-    session = payments.create_checkout_session(booking=booking, amount_cents=5000)
+    session = payments.create_checkout_session(party=booking, amount_cents=5000)
 
     assert isinstance(session, payments.CheckoutSessionStub)
     assert session.payment_status == "unpaid"
@@ -81,7 +82,7 @@ def test_checkout_uses_stripe_when_configured(monkeypatch, settings, booking):
     monkeypatch.setattr(stripe.checkout.Session, "create", staticmethod(fake_create))
 
     try:
-        session = payments.create_checkout_session(booking=booking, amount_cents=booking.trip.price_cents)
+        session = payments.create_checkout_session(party=booking, amount_cents=booking.trip.price_cents)
         assert session.id == "cs_real_123"
         assert stripe.api_key == "sk_test_123"
         kwargs = captured["kwargs"]

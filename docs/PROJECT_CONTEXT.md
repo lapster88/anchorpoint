@@ -114,22 +114,22 @@ Users can belong to multiple guide services with different roles.
 ### GuestProfile
 - Canonical guest record (email, first/last name, phone, DOB, emergency + medical/dietary notes)
 - Updated via guest portal magic links or staff edits
-- Linked to bookings through `primary_guest` and `BookingGuest`
+- Linked to trip parties through `primary_guest` and `TripPartyGuest`
 
-### Booking
+### TripParty
 - `trip` (FK) and `primary_guest` (FK to GuestProfile)
 - `party_size` (covers self + additional guests)
 - Statuses tracked independently: `payment_status`, `info_status`, `waiver_status`
 - `last_guest_activity_at` updated when guests submit info/waivers
-- Related `BookingGuest` rows link every attendee to the booking (and note the primary guest)
+- Related `TripPartyGuest` rows link every attendee to the party (and note the primary guest)
 - Magic-link tokens issued via `GuestAccessToken`
 
 ### Payment
-- Linked to a `Booking`
+- Linked to a `TripParty`
 - `amount_cents`, `currency`, `stripe_payment_intent`, `stripe_checkout_session`, `status`, `created_at`
 
 ### Waiver
-- One-to-one with `Booking`
+- One-to-one with `TripParty`
 - `provider`, `signed_at`, `url`, `external_id`
 
 ### TripReport
@@ -159,10 +159,10 @@ Users can belong to multiple guide services with different roles.
 
 ### Guest Booking
 1. Guest browses trips  
-2. Creates booking → **Stripe Checkout**  
-3. Webhook sets `Booking.status = PAID` on `payment_intent.succeeded`  
+2. Creates party → **Stripe Checkout**  
+3. Webhook sets the party payment status to `PAID` on `payment_intent.succeeded`  
 4. Guest receives **waiver link**, signs; webhook sets `Waiver.signed_at`  
-5. Booking is confirmed (paid + waiver signed)
+5. Party is confirmed (paid + waiver signed)
 
 ### Guide Workflow
 - Views assigned trips and guest details

@@ -29,8 +29,8 @@ class GuestProfile(models.Model):
         return f"{self.first_name} {self.last_name}".strip()
 
 
-class Booking(models.Model):
-    """Reservation for a trip; may include multiple guests."""
+class TripParty(models.Model):
+    """Group of guests reserved on a trip."""
 
     PENDING = "PENDING"
     PAID = "PAID"
@@ -57,13 +57,13 @@ class Booking(models.Model):
         (WAIVER_SIGNED, "Signed"),
     ]
 
-    trip = models.ForeignKey("trips.Trip", on_delete=models.CASCADE, related_name="bookings")
+    trip = models.ForeignKey("trips.Trip", on_delete=models.CASCADE, related_name="parties")
     primary_guest = models.ForeignKey(
         "GuestProfile",
         on_delete=models.PROTECT,
-        related_name="primary_bookings",
+        related_name="primary_parties",
     )
-    guests = models.ManyToManyField("GuestProfile", through="BookingGuest", related_name="bookings")
+    guests = models.ManyToManyField("GuestProfile", through="TripPartyGuest", related_name="parties")
     party_size = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     payment_status = models.CharField(max_length=12, choices=PAYMENT_STATUSES, default=PENDING)
     info_status = models.CharField(max_length=12, choices=INFO_STATUSES, default=INFO_PENDING)
@@ -75,26 +75,26 @@ class Booking(models.Model):
         ordering = ["trip__start", "id"]
 
     def __str__(self):
-        return f"{self.trip.title} booking ({self.party_size})"
+        return f"{self.trip.title} party ({self.party_size})"
 
 
-class BookingGuest(models.Model):
-    """Join table linking bookings to every attending guest."""
+class TripPartyGuest(models.Model):
+    """Join table linking parties to every attending guest."""
 
-    booking = models.ForeignKey("Booking", on_delete=models.CASCADE, related_name="booking_guests")
-    guest = models.ForeignKey("GuestProfile", on_delete=models.CASCADE, related_name="booking_guests")
+    party = models.ForeignKey("TripParty", on_delete=models.CASCADE, related_name="party_guests")
+    guest = models.ForeignKey("GuestProfile", on_delete=models.CASCADE, related_name="party_guests")
     is_primary = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ("booking", "guest")
+        unique_together = ("party", "guest")
 
     def __str__(self):
-        return f"{self.guest} × {self.booking}"
+        return f"{self.guest} × {self.party}"
 
 
 class GuestAccessToken(models.Model):
-    """Magic link token that allows guests to manage bookings without a full account."""
+    """Magic link token that allows guests to manage parties without a full account."""
 
     PURPOSE_LINK = "link"
     PURPOSE_CHOICES = [
@@ -102,7 +102,7 @@ class GuestAccessToken(models.Model):
     ]
 
     guest_profile = models.ForeignKey("GuestProfile", on_delete=models.CASCADE, related_name="access_tokens")
-    booking = models.ForeignKey("Booking", on_delete=models.CASCADE, related_name="access_tokens", null=True, blank=True)
+    party = models.ForeignKey("TripParty", on_delete=models.CASCADE, related_name="access_tokens", null=True, blank=True)
     token_hash = models.CharField(max_length=128, unique=True)
     purpose = models.CharField(max_length=20, choices=PURPOSE_CHOICES, default=PURPOSE_LINK)
     single_use = models.BooleanField(default=True)
@@ -121,3 +121,8 @@ class GuestAccessToken(models.Model):
     @property
     def is_expired(self) -> bool:
         return timezone.now() > self.expires_at or (self.single_use and self.used_at is not None)
+
+
+# Backwards compatibility aliases so existing imports keep working until the frontend migrates.
+Booking = TripParty
+BookingGuest = TripPartyGuest

@@ -1,6 +1,20 @@
 import { api } from '../../lib/api'
 import { CreatePartyPayload, TripPartySummary } from '../staff/api'
 
+export type TripPricingTier = {
+  min_guests: number
+  max_guests: number | null
+  price_per_guest: string | null
+  price_per_guest_cents: number | null
+}
+
+export type TripPricingSnapshot = {
+  currency: string
+  is_deposit_required: boolean
+  deposit_percent: string
+  tiers: TripPricingTier[]
+}
+
 export type TripAssignment = {
   id: number
   guide_id: number
@@ -18,21 +32,16 @@ export type TripDetail = {
   price_cents: number
   difficulty: string | null
   description: string
+  duration_hours: number | null
+  target_client_count: number | null
+  target_guide_count: number | null
+  notes: string | null
   parties: TripPartySummary[]
   assignments: TripAssignment[]
   requires_assignment: boolean
-  pricing_snapshot?: {
-    currency: string
-    is_deposit_required: boolean
-    deposit_percent: string
-    tiers: Array<{
-      min_guests: number
-      max_guests: number | null
-      price_per_guest: string | null
-      price_per_guest_cents: number | null
-    }>
-  } | null
+  pricing_snapshot?: TripPricingSnapshot | null
   template_id?: number | null
+  template_snapshot?: Record<string, unknown> | null
 }
 
 export type CreateTripPayload = {

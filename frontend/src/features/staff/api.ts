@@ -27,7 +27,7 @@ export async function listGuests(query: string): Promise<GuestProfile[]> {
   return data
 }
 
-export async function requestGuestLink(payload: { guest_id: number; booking_id?: number; ttl_hours?: number }): Promise<void> {
+export async function requestGuestLink(payload: { guest_id: number; party_id: number; ttl_hours?: number }): Promise<void> {
   await api.post('/api/guest-links/', payload)
 }
 
@@ -82,6 +82,10 @@ export type TripPartySummary = {
   created_at: string
   payment_preview_url: string | null
   guests: TripPartyGuest[]
+  price_per_guest_cents: number
+  price_per_guest: string
+  total_amount_cents: number
+  total_amount: string
 }
 
 export async function listTripParties(tripId: number): Promise<TripPartySummary[]> {

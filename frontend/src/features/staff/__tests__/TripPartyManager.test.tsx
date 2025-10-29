@@ -30,7 +30,7 @@ const mockCreate = vi.fn()
 
 vi.mock('../CreatePartyForm', () => ({
   __esModule: true,
-  default: ({ onCreated }: { onCreated: (booking: any) => void }) => (
+  default: ({ onCreated }: { onCreated: (party: any) => void }) => (
     <button onClick={() => { mockCreate(); onCreated({ id: 99 }) }}>mock create form</button>
   ),
 }))
@@ -46,6 +46,14 @@ const trip = {
   guide_service_name: 'Summit Guides',
   assignments: [],
   requires_assignment: true,
+  pricing_snapshot: {
+    currency: 'usd',
+    is_deposit_required: false,
+    deposit_percent: '0',
+    tiers: [
+      { min_guests: 1, max_guests: null, price_per_guest: '150.00', price_per_guest_cents: 15000 },
+    ],
+  },
 }
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -80,6 +88,7 @@ describe('TripPartyManager', () => {
       parties: [],
       assignments: [],
       requires_assignment: true,
+      pricing_snapshot: trip.pricing_snapshot,
     }
 
     listTripParties.mockResolvedValue([])
@@ -94,6 +103,7 @@ describe('TripPartyManager', () => {
           { id: 200, guide_id: 10, guide_name: 'Gabe Guide' }
         ],
         requires_assignment: false,
+        pricing_snapshot: trip.pricing_snapshot,
       }
       getTrip.mockResolvedValue(updated)
       return updated
@@ -106,7 +116,7 @@ describe('TripPartyManager', () => {
     vi.clearAllMocks()
   })
 
-  it('shows booking summary when data exists', async () => {
+  it('shows party summary with pricing when data exists', async () => {
     listTripParties.mockResolvedValue([
       {
         id: 10,
@@ -123,17 +133,25 @@ describe('TripPartyManager', () => {
           { id: 1, full_name: 'Greta Guest', email: 'guest@example.com', is_primary: true },
           { id: 2, full_name: 'Frank Friend', email: 'friend@example.com', is_primary: false },
         ],
+        price_per_guest_cents: 15000,
+        price_per_guest: '150.00',
+        total_amount_cents: 30000,
+        total_amount: '300.00',
       },
     ])
 
     renderManager()
 
     expect(await screen.findByText(/Manage Glacier Intro/)).toBeInTheDocument()
+    expect(await screen.findByText(/\$150\.00 per guest/)).toBeInTheDocument()
     expect(await screen.findByText(/Assigned guides/i)).toBeInTheDocument()
     const guestLabels = await screen.findAllByText(/Greta Guest/)
     expect(guestLabels.length).toBeGreaterThan(0)
-    const paymentLabels = await screen.findAllByText(/^Payment$/)
-    expect(paymentLabels.length).toBeGreaterThan(0)
+    const pricingLine = await screen.findByText(/Price per guest/i)
+    expect(pricingLine).toBeInTheDocument()
+    const priceValues = await screen.findAllByText(/\$150\.00/)
+    expect(priceValues[0]).toBeInTheDocument()
+    expect(await screen.findByText(/Total due/i)).toBeInTheDocument()
     expect(await screen.findByText(/payments\/preview/)).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: /Add another party/ })).toBeInTheDocument()
   })
@@ -163,6 +181,10 @@ describe('TripPartyManager', () => {
         created_at: '2025-01-01T00:00:00Z',
         payment_preview_url: null,
         guests: [],
+        price_per_guest_cents: 15000,
+        price_per_guest: '150.00',
+        total_amount_cents: 30000,
+        total_amount: '300.00',
       },
     ])
 

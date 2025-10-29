@@ -79,7 +79,7 @@ describe('GuestsDirectoryPage', () => {
     expect(await screen.findByText(/Unable to load guests/)).toBeInTheDocument()
   })
 
-  it('sends guest link email and trims query input', async () => {
+  it('sends guest link email for a specific party and trims query input', async () => {
     listGuests.mockResolvedValue([guestRecord])
     requestGuestLink.mockResolvedValue()
 
@@ -95,7 +95,7 @@ describe('GuestsDirectoryPage', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Email guest link/ }))
 
     await waitFor(() => {
-      expect(requestGuestLink).toHaveBeenCalledWith({ guest_id: 1 })
+      expect(requestGuestLink).toHaveBeenCalledWith({ guest_id: 1, party_id: 11 })
     })
   })
 })

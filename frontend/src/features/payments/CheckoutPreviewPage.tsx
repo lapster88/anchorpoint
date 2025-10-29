@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 export default function CheckoutPreviewPage(){
   const [params] = useSearchParams()
   const amount = params.get('amount')
-  const bookingId = params.get('booking')
+  const partyId = params.get('party') ?? params.get('booking')
   const sessionId = params.get('session')
 
   const amountDollars = useMemo(() => {
@@ -25,11 +25,11 @@ export default function CheckoutPreviewPage(){
       </header>
 
       <section className="border rounded-md bg-white shadow px-4 py-3 space-y-2">
-        <h3 className="text-sm font-medium uppercase tracking-wide text-gray-500">Booking snapshot</h3>
+        <h3 className="text-sm font-medium uppercase tracking-wide text-gray-500">Party snapshot</h3>
         <dl className="space-y-1">
           <div>
-            <dt className="text-xs text-gray-500">Booking ID</dt>
-            <dd className="text-sm font-mono">{bookingId || 'Unknown'}</dd>
+            <dt className="text-xs text-gray-500">Party ID</dt>
+            <dd className="text-sm font-mono">{partyId || 'Unknown'}</dd>
           </div>
           <div>
             <dt className="text-xs text-gray-500">Amount due</dt>
@@ -50,9 +50,9 @@ export default function CheckoutPreviewPage(){
       <section className="text-sm text-gray-600 space-y-2">
         <p>Next steps while using the stub:</p>
         <ul className="list-disc list-inside space-y-1">
-          <li>Send the guest their booking confirmation email (includes their info portal link).</li>
+          <li>Send the guest their party confirmation email (includes their info portal link).</li>
           <li>Collect payment via your preferred offline method.</li>
-          <li>Mark the booking as paid once funds are received.</li>
+          <li>Mark the party as paid once funds are received.</li>
         </ul>
       </section>
     </div>

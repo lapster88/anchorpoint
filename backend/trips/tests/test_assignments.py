@@ -5,6 +5,7 @@ from availability.models import GuideAvailability
 from accounts.models import User
 from orgs.models import GuideService
 from trips.models import Assignment, Trip
+from trips.pricing import build_single_tier_snapshot
 
 
 @pytest.fixture
@@ -32,7 +33,7 @@ def trip(db, guide_service):
         location="Alps",
         start=now + timezone.timedelta(days=5),
         end=now + timezone.timedelta(days=6),
-        price_cents=50000,
+        pricing_snapshot=build_single_tier_snapshot(50000),
     )
 
 

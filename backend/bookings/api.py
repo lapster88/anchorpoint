@@ -1,11 +1,11 @@
 from django.db.models import Q
 from django.utils import timezone
-from rest_framework import generics, permissions, status, viewsets
+from rest_framework import generics, permissions, serializers, status, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.models import ServiceMembership
-from bookings.models import Booking, GuestProfile
+from bookings.models import TripParty, GuestProfile
 from bookings.serializers import (
     GuestProfileSerializer,
     GuestProfileDetailSerializer,
@@ -38,8 +38,8 @@ class GuestProfileViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = (
             GuestProfile.objects.all()
             .prefetch_related(
-                "bookings",
-                "bookings__trip",
+                "parties",
+                "parties__trip",
             )
             .order_by("last_name", "first_name")
         )
@@ -64,11 +64,13 @@ class GuestLinkRequestView(generics.CreateAPIView):
 
     def perform_create(self, serializer):
         guest = serializer.validated_data["guest"]
-        booking = serializer.validated_data.get("booking")
-        expires_at = booking.trip.end + serializer.validated_data["ttl"]
+        party = serializer.validated_data.get("party")
+        if party is None:
+            raise serializers.ValidationError({"party_id": "Party is required."})
+        expires_at = party.trip.end + serializer.validated_data["ttl"]
         issue_guest_access_token(
             guest=guest,
-            booking=booking,
+            party=party,
             expires_at=expires_at,
             single_use=False,
         )
@@ -90,11 +92,11 @@ class GuestProfileUpdateView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        booking = access_token.booking
-        if booking:
-            booking.last_guest_activity_at = timezone.now()
-            booking.info_status = Booking.INFO_COMPLETE
-            booking.save(update_fields=["last_guest_activity_at", "info_status"])
+        party = access_token.party
+        if party:
+            party.last_guest_activity_at = timezone.now()
+            party.info_status = TripParty.INFO_COMPLETE
+            party.save(update_fields=["last_guest_activity_at", "info_status"])
 
         if access_token.single_use:
             access_token.mark_used()

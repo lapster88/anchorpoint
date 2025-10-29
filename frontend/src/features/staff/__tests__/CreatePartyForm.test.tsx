@@ -21,7 +21,13 @@ const trip = {
   title: 'Summit Push',
   start: '2025-10-20T08:00:00Z',
   end: '2025-10-20T16:00:00Z',
-  price_cents: 15000
+  price_cents: 15000,
+  pricing_snapshot: {
+    currency: 'usd',
+    is_deposit_required: false,
+    deposit_percent: '0',
+    tiers: [{ min_guests: 1, max_guests: null, price_per_guest: '150.00', price_per_guest_cents: 15000 }],
+  },
 }
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -50,7 +56,7 @@ describe('CreatePartyForm', () => {
     })
   })
 
-  it('submits booking and shows links', async () => {
+  it('submits party and shows links', async () => {
     const { createParty } = await import('../api')
     createParty.mockResolvedValueOnce({
       id: 1,

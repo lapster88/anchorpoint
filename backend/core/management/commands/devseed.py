@@ -7,10 +7,11 @@ from django.utils import timezone
 
 from availability.models import GuideAvailability, GuideAvailabilityShare
 from accounts.models import ServiceMembership, User
-from bookings.models import Booking, BookingGuest, GuestProfile
+from bookings.models import TripParty, TripPartyGuest, GuestProfile
 from bookings.services.guest_tokens import issue_guest_access_token
 from orgs.models import GuideService
 from trips.models import Assignment, Trip, TripTemplate
+from trips.pricing import build_single_tier_snapshot
 
 
 SEED_PASSWORD = "Anchorpoint123!"
@@ -204,23 +205,23 @@ class Command(BaseCommand):
                 defaults={"visibility": GuideAvailability.VISIBILITY_BUSY},
             )
 
-            Booking.objects.all().delete()
+            TripParty.objects.all().delete()
 
-            booking = Booking.objects.create(
+            party = TripParty.objects.create(
                 trip=trad_trip,
                 primary_guest=greta_guest,
                 party_size=2,
-                payment_status=Booking.PAID,
-                info_status=Booking.INFO_COMPLETE,
-                waiver_status=Booking.WAIVER_SIGNED,
+                payment_status=TripParty.PAID,
+                info_status=TripParty.INFO_COMPLETE,
+                waiver_status=TripParty.WAIVER_SIGNED,
                 last_guest_activity_at=timezone.now(),
             )
-            BookingGuest.objects.create(booking=booking, guest=greta_guest, is_primary=True)
-            BookingGuest.objects.create(booking=booking, guest=friend_guest, is_primary=False)
+            TripPartyGuest.objects.create(party=party, guest=greta_guest, is_primary=True)
+            TripPartyGuest.objects.create(party=party, guest=friend_guest, is_primary=False)
 
             issue_guest_access_token(
                 guest=greta_guest,
-                booking=booking,
+                party=party,
                 expires_at=trad_trip.end + timedelta(days=1),
                 single_use=False,
             )
@@ -314,13 +315,13 @@ class Command(BaseCommand):
             location=location,
             start=start,
             end=end,
-            price_cents=price_cents,
             difficulty=difficulty,
             description=f"Sample itinerary for {title}.",
             duration_hours=duration_hours,
             target_client_count=target_client_count,
             target_guide_count=target_guide_count,
             notes=notes,
+            pricing_snapshot=build_single_tier_snapshot(price_cents),
         )
 
     def _ensure_superuser(self) -> User:

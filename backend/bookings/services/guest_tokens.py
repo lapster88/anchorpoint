@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from bookings.models import Booking, GuestAccessToken, GuestProfile
+from bookings.models import TripParty, GuestAccessToken, GuestProfile
 
 
 def _hash_token(token: str) -> str:
@@ -14,7 +14,7 @@ def _hash_token(token: str) -> str:
 def issue_guest_access_token(
     *,
     guest: GuestProfile,
-    booking: Booking | None = None,
+    party: TripParty | None = None,
     expires_at=None,
     lifetime: timedelta | None = timedelta(days=7),
     single_use: bool = True,
@@ -32,7 +32,7 @@ def issue_guest_access_token(
 
     token = GuestAccessToken.objects.create(
         guest_profile=guest,
-        booking=booking,
+        party=party,
         token_hash=token_hash,
         expires_at=expires_at,
         single_use=single_use,
@@ -45,7 +45,7 @@ def validate_guest_access_token(raw_token: str) -> GuestAccessToken | None:
     """Return the token if still valid; otherwise None."""
     token_hash = _hash_token(raw_token)
     try:
-        token = GuestAccessToken.objects.select_related("guest_profile", "booking").get(token_hash=token_hash)
+        token = GuestAccessToken.objects.select_related("guest_profile", "party").get(token_hash=token_hash)
     except GuestAccessToken.DoesNotExist:
         return None
 

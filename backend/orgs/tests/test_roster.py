@@ -8,6 +8,7 @@ from rest_framework.test import APIClient
 from accounts.models import ServiceInvitation, ServiceMembership, User
 from orgs.models import GuideService
 from trips.models import Assignment, Trip
+from trips.pricing import build_single_tier_snapshot
 
 
 @pytest.fixture
@@ -197,7 +198,7 @@ def test_deactivating_membership_removes_future_assignments(api_client, service)
         location="Mt. Baker",
         start=timezone.now() + timedelta(days=3),
         end=timezone.now() + timedelta(days=4),
-        price_cents=15000,
+        pricing_snapshot=build_single_tier_snapshot(15000),
     )
     Assignment.objects.create(trip=trip, guide=guide)
 

@@ -664,6 +664,6 @@ function selectTemplateRate(template: TripTemplateOption, partySize: number): st
   const normalizedSize = Number.isFinite(partySize) && partySize > 0 ? partySize : 1
   const matchingTier = tiers.find((tier) => tier.max_guests === null || normalizedSize <= tier.max_guests)
   const resolvedTier = matchingTier ?? tiers[tiers.length - 1]
-  const price = resolvedTier?.price_per_guest * partySize
+  const price = resolvedTier?.price_per_guest
   return price === undefined || price === null ? '' : String(price)
 }

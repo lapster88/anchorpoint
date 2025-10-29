@@ -5,7 +5,6 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.models import ServiceMembership, User
-from bookings.models import Booking
 from orgs.models import GuideService
 from trips.models import TripTemplate, Trip
 

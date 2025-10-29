@@ -3,17 +3,18 @@ from datetime import timedelta
 from django.utils import timezone
 from rest_framework import serializers
 
-from bookings.models import Booking, BookingGuest, GuestProfile
+from bookings.models import TripParty, TripPartyGuest, GuestProfile
 from bookings.services.payments import get_latest_payment_preview_url
+from trips.pricing import select_price_per_guest_cents, snapshot_base_price_cents
 
 
-class BookingSummarySerializer(serializers.ModelSerializer):
+class TripPartySummarySerializer(serializers.ModelSerializer):
     trip_title = serializers.CharField(source="trip.title", read_only=True)
     trip_start = serializers.DateTimeField(source="trip.start", read_only=True)
     trip_end = serializers.DateTimeField(source="trip.end", read_only=True)
 
     class Meta:
-        model = Booking
+        model = TripParty
         fields = [
             "id",
             "trip_title",
@@ -29,7 +30,7 @@ class BookingSummarySerializer(serializers.ModelSerializer):
 
 class GuestProfileSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(read_only=True)
-    parties = BookingSummarySerializer(many=True, read_only=True, source="bookings")
+    parties = TripPartySummarySerializer(many=True, read_only=True)
 
     class Meta:
         model = GuestProfile
@@ -46,7 +47,7 @@ class GuestProfileSerializer(serializers.ModelSerializer):
 
 
 class GuestProfileDetailSerializer(serializers.ModelSerializer):
-    parties = BookingSummarySerializer(many=True, read_only=True, source="bookings")
+    parties = TripPartySummarySerializer(many=True, read_only=True)
     full_name = serializers.CharField(read_only=True)
 
     class Meta:
@@ -86,23 +87,20 @@ class GuestProfileUpdateSerializer(serializers.ModelSerializer):
 
 class GuestLinkRequestSerializer(serializers.Serializer):
     guest_id = serializers.PrimaryKeyRelatedField(queryset=GuestProfile.objects.all(), source="guest")
-    booking_id = serializers.PrimaryKeyRelatedField(
-        queryset=Booking.objects.all(),
-        source="booking",
-        allow_null=True,
-        required=False,
+    party_id = serializers.PrimaryKeyRelatedField(
+        queryset=TripParty.objects.all(),
+        source="party",
     )
     ttl_hours = serializers.IntegerField(min_value=1, required=False, default=24)
 
     def validate(self, attrs):
-        booking = attrs.get("booking")
+        party = attrs.get("party")
         guest = attrs["guest"]
-        if booking and booking.primary_guest_id != guest.id:
-            raise serializers.ValidationError("Guest is not associated with the specified booking.")
+        if party.primary_guest_id != guest.id:
+            raise serializers.ValidationError("Guest is not associated with the specified party.")
         return attrs
 
     def create(self, validated_data):
-        # handled in view
         return validated_data
 
     @property
@@ -128,19 +126,23 @@ class GuestInputSerializer(serializers.Serializer):
     dietary_notes = serializers.CharField(required=False, allow_blank=True)
 
 
-class BookingCreateSerializer(serializers.Serializer):
+class TripPartyCreateSerializer(serializers.Serializer):
     primary_guest = GuestInputSerializer()
     additional_guests = GuestInputSerializer(many=True, required=False)
     party_size = serializers.IntegerField(min_value=1, required=False)
 
 
-class BookingResponseSerializer(serializers.ModelSerializer):
+class TripPartyUpdateSerializer(serializers.Serializer):
+    party_size = serializers.IntegerField(min_value=1, required=False)
+
+
+class TripPartyResponseSerializer(serializers.ModelSerializer):
     payment_url = serializers.SerializerMethodField()
     guest_portal_url = serializers.SerializerMethodField()
     trip = serializers.IntegerField(source="trip_id", read_only=True)
 
     class Meta:
-        model = Booking
+        model = TripParty
         fields = [
             "id",
             "trip",
@@ -152,10 +154,10 @@ class BookingResponseSerializer(serializers.ModelSerializer):
             "guest_portal_url",
         ]
 
-    def get_payment_url(self, obj):
+    def get_payment_url(self, obj: TripParty):
         return getattr(obj, "_payment_url", None)
 
-    def get_guest_portal_url(self, obj):
+    def get_guest_portal_url(self, obj: TripParty):
         return getattr(obj, "_guest_portal_url", None)
 
 
@@ -164,9 +166,13 @@ class TripPartySerializer(serializers.ModelSerializer):
     primary_guest_email = serializers.EmailField(source="primary_guest.email", read_only=True)
     payment_preview_url = serializers.SerializerMethodField()
     guests = serializers.SerializerMethodField()
+    price_per_guest_cents = serializers.SerializerMethodField()
+    price_per_guest = serializers.SerializerMethodField()
+    total_amount_cents = serializers.SerializerMethodField()
+    total_amount = serializers.SerializerMethodField()
 
     class Meta:
-        model = Booking
+        model = TripParty
         fields = [
             "id",
             "trip_id",
@@ -179,17 +185,18 @@ class TripPartySerializer(serializers.ModelSerializer):
             "created_at",
             "payment_preview_url",
             "guests",
+            "price_per_guest_cents",
+            "price_per_guest",
+            "total_amount_cents",
+            "total_amount",
         ]
         read_only_fields = fields
 
-    def get_payment_preview_url(self, obj: Booking):
+    def get_payment_preview_url(self, obj: TripParty):
         return get_latest_payment_preview_url(obj)
 
-    def get_guests(self, obj: Booking):
-        guests = (
-            obj.booking_guests.select_related("guest")
-            .all()
-        )
+    def get_guests(self, obj: TripParty):
+        guests = obj.party_guests.select_related("guest")
         return [
             {
                 "id": guest.guest_id,
@@ -199,3 +206,23 @@ class TripPartySerializer(serializers.ModelSerializer):
             }
             for guest in guests
         ]
+
+    def get_price_per_guest_cents(self, obj: TripParty) -> int:
+        trip = obj.trip
+        party_size = obj.party_size or 1
+        cents = select_price_per_guest_cents(
+            trip.pricing_snapshot,
+            party_size,
+            default=snapshot_base_price_cents(trip.pricing_snapshot),
+        )
+        return cents or trip.price_cents
+
+    def get_price_per_guest(self, obj: TripParty) -> str:
+        cents = self.get_price_per_guest_cents(obj)
+        return f"{cents / 100:.2f}"
+
+    def get_total_amount_cents(self, obj: TripParty) -> int:
+        return self.get_price_per_guest_cents(obj) * (obj.party_size or 1)
+
+    def get_total_amount(self, obj: TripParty) -> str:
+        return f"{self.get_total_amount_cents(obj) / 100:.2f}"

@@ -25,7 +25,8 @@
 - Frontend unit tests (with coverage): `docker compose --env-file .env -f infra/docker-compose.yml exec frontend pnpm test`. Vitest writes HTML/LCOV reports to `frontend/coverage/`.
 - Frontend build check: `docker compose --env-file .env -f infra/docker-compose.yml exec frontend pnpm build`.
 - End-to-end baseline available via `make e2e` (boots backend/frontend, then runs Playwright container).
-- Booking flow smoke test lives at `frontend/e2e/booking.spec.ts` — run with `docker compose exec playwright pnpm test:e2e booking.spec.ts` after seeding data.
+- Booking flow (TripParty) smoke test lives at `frontend/e2e/booking.spec.ts` — run with `docker compose exec playwright pnpm test:e2e booking.spec.ts` after seeding data.
+- Backend nomenclature now uses `TripParty` (formerly `Booking`) and `TripPartyGuest`; update API clients accordingly.
 - Policy: Every new feature or regression fix must land with automated test coverage (backend pytest, frontend unit, or e2e as appropriate). Update or add tests before marking work complete.
 - Guest workflows use tokenised magic links; see `docs/design/guests.md` before changing bookings or guest data flow.
 - Trip party/payment/email architecture is summarised in `docs/PROJECT_CONTEXT.md` with detail in `docs/design/parties.md`.

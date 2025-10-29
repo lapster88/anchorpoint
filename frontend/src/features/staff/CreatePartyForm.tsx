@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 
 import { CreatePartyPayload, CreatePartyResponse, createParty } from './api'
+import { TripPricingSnapshot } from '../trips/api'
+import { formatCurrencyFromCents, snapshotBasePriceCents } from '../trips/pricing'
 
 export type TripSummary = {
   id: number
@@ -12,6 +14,7 @@ export type TripSummary = {
   price_cents: number
   guide_service?: number
   guide_service_name?: string
+  pricing_snapshot?: TripPricingSnapshot | null
 }
 
 type Props = {
@@ -94,6 +97,13 @@ export default function CreatePartyForm({ trip, onClose, onCreated }: Props){
     mutation.mutate(payload)
   }
 
+  const basePriceCents = useMemo(
+    () => snapshotBasePriceCents(trip.pricing_snapshot, trip.price_cents) ?? trip.price_cents,
+    [trip.pricing_snapshot, trip.price_cents]
+  )
+  const currency = trip.pricing_snapshot?.currency ?? 'USD'
+  const priceLabel = formatCurrencyFromCents(basePriceCents, currency) ?? `$${(basePriceCents / 100).toFixed(2)}`
+
   const paymentLink = result?.payment_url || ''
   const guestLink = result?.guest_portal_url || ''
 
@@ -101,7 +111,9 @@ export default function CreatePartyForm({ trip, onClose, onCreated }: Props){
     <div className="border rounded-lg bg-white shadow-md p-6 space-y-5">
       <header className="space-y-1">
         <h2 className="text-xl font-semibold">Create party for {trip.title}</h2>
-        <p className="text-sm text-gray-600">Trip date: {new Date(trip.start).toLocaleDateString()} · ${(trip.price_cents / 100).toFixed(2)} per guest</p>
+        <p className="text-sm text-gray-600">
+          Trip date: {new Date(trip.start).toLocaleDateString()} · {priceLabel ?? '—'} per guest
+        </p>
       </header>
 
       <form className="space-y-6" onSubmit={handleSubmit} noValidate>
