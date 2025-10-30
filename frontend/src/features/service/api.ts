@@ -4,7 +4,8 @@ export type TripTemplate = {
   id: number
   service: number
   title: string
-  duration_hours: number
+  duration_hours: number | null
+  duration_days: number | null
   location: string
   pricing_currency: string
   is_deposit_required: boolean
@@ -14,6 +15,7 @@ export type TripTemplate = {
     max_guests: number | null
     price_per_guest: string
   }>
+  timing_mode: 'single_day' | 'multi_day'
   target_clients_per_guide: number | null
   notes: string
   is_active: boolean
@@ -24,12 +26,14 @@ export type TripTemplate = {
 export type TripTemplatePayload = {
   service: number
   title: string
-  duration_hours: number
+  duration_hours: number | null
+  duration_days: number | null
   location: string
   pricing_currency: string
   is_deposit_required: boolean
   deposit_percent: string
   pricing_tiers: TripTemplate['pricing_tiers']
+  timing_mode: 'single_day' | 'multi_day'
   target_clients_per_guide: number | null
   notes?: string
   is_active: boolean

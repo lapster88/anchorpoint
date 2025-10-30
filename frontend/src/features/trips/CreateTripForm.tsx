@@ -27,11 +27,16 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
   const queryClient = useQueryClient()
   const [title, setTitle] = useState('')
   const [location, setLocation] = useState('')
-  const [start, setStart] = useState('')
-  const [end, setEnd] = useState('')
+  const SINGLE_DAY = 'single_day'
+  const MULTI_DAY = 'multi_day'
+  const [timingMode, setTimingMode] = useState<'single_day' | 'multi_day'>(MULTI_DAY)
+  const [singleDayDate, setSingleDayDate] = useState('')
+  const [singleDayStartTime, setSingleDayStartTime] = useState('')
+  const [singleDayDurationHours, setSingleDayDurationHours] = useState('')
+  const [multiDayStart, setMultiDayStart] = useState('')
+  const [multiDayDurationDays, setMultiDayDurationDays] = useState('')
   const [price, setPrice] = useState('')
   const [description, setDescription] = useState('')
-  const [durationHours, setDurationHours] = useState('')
   const [targetGuestsPerGuide, setTargetGuestsPerGuide] = useState('')
   const [notes, setNotes] = useState('')
   const [guides, setGuides] = useState<GuideOption[]>([])
@@ -101,8 +106,8 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
       setError('No guide service selected.')
       return
     }
-    if (!location.trim() || !start || !end) {
-      setError('Trip location, start, and end are required.')
+    if (!location.trim()) {
+      setError('Trip location is required.')
       return
     }
     if (!primary.email.trim()) {
@@ -134,26 +139,74 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
       primary.email.trim() ||
       'Private Trip'
 
+    let startIso: string | null = null
+    let durationHoursValue: number | undefined
+    let durationDaysValue: number | undefined
+
+    if (timingMode === SINGLE_DAY) {
+      if (!singleDayDate || !singleDayStartTime) {
+        setError('Select a date and start time for single-day trips.')
+        return
+      }
+      const hoursNumber = Number(singleDayDurationHours)
+      if (!singleDayDurationHours.trim() || Number.isNaN(hoursNumber) || hoursNumber <= 0) {
+        setError('Duration (hours) must be greater than zero for single-day trips.')
+        return
+      }
+      durationHoursValue = Math.round(hoursNumber)
+      const startDateTime = new Date(`${singleDayDate}T${singleDayStartTime}`)
+      if (Number.isNaN(startDateTime.getTime())) {
+        setError('Unable to parse the start date/time for this trip.')
+        return
+      }
+      startIso = startDateTime.toISOString()
+    } else {
+      if (!multiDayStart) {
+        setError('Select a start date and time for multi-day trips.')
+        return
+      }
+      const daysNumber = Number(multiDayDurationDays)
+      if (!multiDayDurationDays.trim() || Number.isNaN(daysNumber) || daysNumber <= 0) {
+        setError('Duration (days) must be at least one for multi-day trips.')
+        return
+      }
+      durationDaysValue = Math.round(daysNumber)
+      const startDateTime = new Date(multiDayStart)
+      if (Number.isNaN(startDateTime.getTime())) {
+        setError('Unable to parse the start date/time for this trip.')
+        return
+      }
+      startIso = startDateTime.toISOString()
+    }
+
+    if (!startIso) {
+      setError('Start time is required.')
+      return
+    }
+
     const payload: CreateTripPayload = {
       guide_service: serviceId,
       title: computedTitle,
       location: location.trim(),
-      start: new Date(start).toISOString(),
-      end: new Date(end).toISOString(),
+      start: startIso,
       description: description.trim() || undefined,
       guides: selectedGuideIds,
       party: partyPayload
     }
 
+    payload.timing_mode = timingMode
+    if (timingMode === SINGLE_DAY && durationHoursValue !== undefined) {
+      payload.duration_hours = durationHoursValue
+      delete payload.duration_days
+    } else if (timingMode === MULTI_DAY && durationDaysValue !== undefined) {
+      payload.duration_days = durationDaysValue
+      delete payload.duration_hours
+    }
+
     if (selectedTemplate) {
       payload.template = selectedTemplate.id
     }
-    if (!selectedTemplate && durationHours.trim()) {
-      payload.duration_hours = Number(durationHours)
-    } else if (selectedTemplate) {
-      payload.duration_hours = selectedTemplate.duration_hours
-    }
-    if (!selectedTemplate && targetGuestsPerGuide.trim()) {
+    if (targetGuestsPerGuide.trim()) {
       const ratioNumber = Number(targetGuestsPerGuide)
       if (Number.isNaN(ratioNumber) || ratioNumber <= 0) {
         setError('Target guests per guide must be greater than zero if provided.')
@@ -179,7 +232,12 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
       setGuides([])
       setSelectedGuideIds([])
       setSelectedTemplateId('')
-      setDurationHours('')
+      setTimingMode(MULTI_DAY)
+      setSingleDayDurationHours('')
+      setSingleDayDate('')
+      setSingleDayStartTime('')
+      setMultiDayDurationDays('')
+      setMultiDayStart('')
       setTargetGuestsPerGuide('')
       setNotes('')
       setPrice('')
@@ -206,6 +264,32 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
     }
   }, [serviceId])
 
+  const handleTimingModeChange = (mode: 'single_day' | 'multi_day') => {
+    setTimingMode(mode)
+    if (mode === SINGLE_DAY) {
+      setMultiDayDurationDays('')
+      setMultiDayStart('')
+      setSingleDayDurationHours((prev) => {
+        if (prev) return prev
+        if (selectedTemplate?.timing_mode === SINGLE_DAY && selectedTemplate.duration_hours) {
+          return String(selectedTemplate.duration_hours)
+        }
+        return ''
+      })
+    } else {
+      setSingleDayDate('')
+      setSingleDayStartTime('')
+      setSingleDayDurationHours('')
+      setMultiDayDurationDays((prev) => {
+        if (prev) return prev
+        if (selectedTemplate?.timing_mode === MULTI_DAY && selectedTemplate.duration_days) {
+          return String(selectedTemplate.duration_days)
+        }
+        return ''
+      })
+    }
+  }
+
   useEffect(() => {
     if (!selectedTemplate) {
       if (prevTemplateIdRef.current) {
@@ -220,7 +304,21 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
     prevTemplateIdRef.current = selectedTemplateId
     setTitle(selectedTemplate.title)
     setLocation(selectedTemplate.location)
-    setDurationHours(String(selectedTemplate.duration_hours || ''))
+    setTimingMode(selectedTemplate.timing_mode)
+    if (selectedTemplate.timing_mode === SINGLE_DAY) {
+      setSingleDayDurationHours(
+        selectedTemplate.duration_hours ? String(selectedTemplate.duration_hours) : ''
+      )
+      setMultiDayDurationDays('')
+      setSingleDayDate('')
+      setSingleDayStartTime('')
+    } else {
+      setMultiDayDurationDays(
+        selectedTemplate.duration_days ? String(selectedTemplate.duration_days) : ''
+      )
+      setSingleDayDurationHours('')
+      setMultiDayStart('')
+    }
     setTargetGuestsPerGuide(
       selectedTemplate.target_clients_per_guide ? String(selectedTemplate.target_clients_per_guide) : ''
     )
@@ -283,9 +381,10 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
               const value = event.target.value
               setSelectedTemplateId(value)
               if (!value) {
-                setDurationHours('')
+                handleTimingModeChange(MULTI_DAY)
                 setTargetGuestsPerGuide('')
                 setNotes('')
+                setMultiDayStart('')
                 if (manualPriceRef.current){
                   setPrice(manualPriceRef.current)
                 }
@@ -321,32 +420,91 @@ export default function CreateTripForm({ serviceId, serviceName, onClose, onCrea
           <TextField label="Location" value={location} onChange={setLocation} required />
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <DateTimeField label="Start" value={start} onChange={setStart} required />
-          <DateTimeField label="End" value={end} onChange={setEnd} required />
-        </div>
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium text-gray-700">Trip length</legend>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="radio"
+                name="timing-mode"
+                value={SINGLE_DAY}
+                checked={timingMode === SINGLE_DAY}
+                onChange={() => handleTimingModeChange(SINGLE_DAY)}
+              />
+              Single day
+            </label>
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="radio"
+                name="timing-mode"
+                value={MULTI_DAY}
+                checked={timingMode === MULTI_DAY}
+                onChange={() => handleTimingModeChange(MULTI_DAY)}
+              />
+              Multi day
+            </label>
+          </div>
+        </fieldset>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <TextField
-            label="Duration (hours)"
-            value={durationHours}
-            onChange={setDurationHours}
-            required={!selectedTemplate}
-            type="number"
-            min={1}
-          />
-          <div>
+        {timingMode === SINGLE_DAY ? (
+          <div className="grid gap-4 md:grid-cols-3">
+            <label className="block text-sm font-medium text-gray-700">
+              Trip date
+              <input
+                type="date"
+                value={singleDayDate}
+                onChange={(event) => setSingleDayDate(event.target.value)}
+                className="mt-1 w-full rounded border px-3 py-2"
+                required
+              />
+            </label>
+            <label className="block text-sm font-medium text-gray-700">
+              Start time
+              <input
+                type="time"
+                value={singleDayStartTime}
+                onChange={(event) => setSingleDayStartTime(event.target.value)}
+                className="mt-1 w-full rounded border px-3 py-2"
+                required
+              />
+            </label>
+            <label className="block text-sm font-medium text-gray-700">
+              Duration (hours)
+              <input
+                type="number"
+                min={1}
+                value={singleDayDurationHours}
+                onChange={(event) => setSingleDayDurationHours(event.target.value)}
+                className="mt-1 w-full rounded border px-3 py-2"
+                required
+              />
+            </label>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            <DateTimeField label="Start" value={multiDayStart} onChange={setMultiDayStart} required />
             <TextField
-              label="Target guests per guide (optional)"
-              value={targetGuestsPerGuide}
-              onChange={setTargetGuestsPerGuide}
+              label="Duration (days)"
+              value={multiDayDurationDays}
+              onChange={setMultiDayDurationDays}
+              required
               type="number"
               min={1}
             />
-            <p className="mt-1 text-xs text-gray-500">
-              Guides use this to plan staffing; it&apos;s a goal, not a hard requirement.
-            </p>
           </div>
+        )}
+
+        <div>
+          <TextField
+            label="Target guests per guide (optional)"
+            value={targetGuestsPerGuide}
+            onChange={setTargetGuestsPerGuide}
+            type="number"
+            min={1}
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Guides use this to plan staffing; it&apos;s a goal, not a hard requirement.
+          </p>
         </div>
 
         {selectedTemplate && (

@@ -19,11 +19,13 @@ def _template_payload(service_id):
         "service": service_id,
         "title": "Glacier Skills",
         "duration_hours": 8,
+        "duration_days": None,
         "location": "Coleman Glacier",
         "pricing_currency": "usd",
         "is_deposit_required": True,
         "deposit_percent": "25.00",
         "pricing_tiers": TIERS,
+        "timing_mode": Trip.SINGLE_DAY,
         "target_clients_per_guide": 3,
         "notes": "Bring glacier kits.",
         "is_active": True,
@@ -73,11 +75,41 @@ def test_owner_creates_trip_template_via_api(owner, service):
     assert data["pricing_currency"] == "usd"
     assert len(data["pricing_tiers"]) == 2
     assert data["target_clients_per_guide"] == 3
+    assert data["timing_mode"] == Trip.SINGLE_DAY
+    assert data["duration_hours"] == 8
+    assert data["duration_days"] is None
 
     template = TripTemplate.objects.get(id=data["id"])
     assert template.is_deposit_required is True
     assert template.deposit_percent == 25
     assert template.pricing_tiers[0]["min_guests"] == 1
+    assert template.duration_hours == 8
+    assert template.duration_days is None
+
+
+@pytest.mark.django_db
+def test_owner_creates_multi_day_template(owner, service):
+    client = auth_client(owner)
+    payload = _template_payload(service.id)
+    payload.update(
+        {
+            "timing_mode": Trip.MULTI_DAY,
+            "duration_hours": None,
+            "duration_days": 3,
+        }
+    )
+
+    response = client.post("/api/trip-templates/", payload, format="json")
+    assert response.status_code == 201
+    data = response.json()
+    assert data["timing_mode"] == Trip.MULTI_DAY
+    assert data["duration_days"] == 3
+    assert data["duration_hours"] is None
+
+    template = TripTemplate.objects.get(id=data["id"])
+    assert template.timing_mode == Trip.MULTI_DAY
+    assert template.duration_days == 3
+    assert template.duration_hours is None
 
 
 @pytest.mark.django_db
@@ -117,11 +149,13 @@ def test_duplicate_template(owner, service):
         service=service,
         title="Glacier Skills",
         duration_hours=8,
+        duration_days=None,
         location="Coleman Glacier",
         pricing_currency="usd",
         is_deposit_required=True,
         deposit_percent=25,
         pricing_tiers=TIERS,
+        timing_mode=Trip.SINGLE_DAY,
         target_clients_per_guide=3,
         notes="Bring glacier kits.",
         created_by=owner,
@@ -142,11 +176,13 @@ def template(owner, service):
         service=service,
         title="Glacier Skills",
         duration_hours=8,
+        duration_days=None,
         location="Coleman Glacier",
         pricing_currency="usd",
         is_deposit_required=True,
         deposit_percent=25,
         pricing_tiers=TIERS,
+        timing_mode=Trip.SINGLE_DAY,
         target_clients_per_guide=3,
         notes="Bring glacier kits.",
         created_by=owner,
@@ -173,14 +209,11 @@ def test_create_trip_from_template_sets_snapshot(monkeypatch, owner, service, te
     monkeypatch.setattr("trips.api.create_checkout_session", lambda **kwargs: fake_session)
     monkeypatch.setattr("trips.api.send_booking_confirmation_email", lambda **kwargs: None)
 
-    start = timezone.now() + timezone.timedelta(days=14)
-    end = start + timezone.timedelta(hours=template.duration_hours or 8)
-
+    start = (timezone.now() + timezone.timedelta(days=14)).replace(hour=9, minute=0, second=0, microsecond=0)
     payload = {
         "guide_service": service.id,
         "template": template.id,
         "start": start.isoformat().replace("+00:00", "Z"),
-        "end": end.isoformat().replace("+00:00", "Z"),
         "description": "Full glacier curricula",
         "party": {
             "primary_guest": {
@@ -200,6 +233,12 @@ def test_create_trip_from_template_sets_snapshot(monkeypatch, owner, service, te
     data = response.json()
     assert data["template_id"] == template.id
     assert data["pricing_snapshot"]["tiers"][0]["price_per_guest_cents"] == 15000
+    assert data["timing_mode"] == Trip.SINGLE_DAY
+    assert data["duration_hours"] == template.duration_hours
+    assert data["duration_days"] is None
 
     trip = Trip.objects.get(id=data["id"])
     assert trip.price_cents == 15000
+    assert trip.timing_mode == Trip.SINGLE_DAY
+    assert trip.duration_hours == template.duration_hours
+    assert trip.duration_days is None

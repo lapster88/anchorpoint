@@ -30,8 +30,18 @@ shell: be
 fe:
 	$(COMPOSE) exec frontend sh || true
 
+devseed:
+	$(COMPOSE) exec backend python manage.py devseed
+
 test:
 	$(COMPOSE) exec backend pytest
+	$(COMPOSE) exec frontend pnpm test
+	$(COMPOSE) exec frontend pnpm build
+
+test-be:
+	$(COMPOSE) exec backend pytest
+
+test-fe:
 	$(COMPOSE) exec frontend pnpm test
 	$(COMPOSE) exec frontend pnpm build
 

@@ -1,19 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { TripSummary } from './CreatePartyForm'
 import CreatePartyForm from './CreatePartyForm'
 import { listTripParties, TripPartySummary } from './api'
-import {
-  getTrip,
-  TripAssignment,
-  TripDetail,
-  listServiceGuides,
-  assignGuides,
-  GuideOption,
-  TripPricingSnapshot,
-} from '../trips/api'
+import { getTrip, listServiceGuides, assignGuides } from '../trips/api'
+import type { TripAssignment, TripDetail, GuideOption, TripPricingSnapshot } from '../trips/api'
 import { formatCurrencyFromCents, snapshotBasePriceCents } from '../trips/pricing'
+import EditTripForm from '../trips/EditTripForm'
 
 type Props = {
   trip: TripSummary
@@ -29,6 +23,7 @@ export default function TripPartyManager({ trip, onClose, canEditAssignments, se
   const [guides, setGuides] = useState<GuideOption[]>([])
   const [selectedGuideIds, setSelectedGuideIds] = useState<number[]>([])
   const [showSaved, setShowSaved] = useState(false)
+  const [showEditForm, setShowEditForm] = useState(false)
 
   const tripDetailQuery = useQuery({
     queryKey: ['trip-detail', trip.id],
@@ -70,7 +65,11 @@ export default function TripPartyManager({ trip, onClose, canEditAssignments, se
   const tripMeta: TripDetail | null = tripDetailQuery.data ?? null
   const title = tripMeta?.title ?? trip.title
   const locationLabel = tripMeta?.location ?? trip.location
-  const startDate = new Date(tripMeta?.start ?? trip.start)
+  const startValue = tripMeta?.start ?? trip.start
+  const endValue = tripMeta?.end ?? trip.end
+  const timingMode = tripMeta?.timing_mode ?? trip.timing_mode ?? 'multi_day'
+  const durationHours = tripMeta?.duration_hours ?? trip.duration_hours ?? null
+  const durationDays = tripMeta?.duration_days ?? trip.duration_days ?? null
   const pricingSnapshot: TripPricingSnapshot | null = tripMeta?.pricing_snapshot ?? trip.pricing_snapshot ?? null
   const basePriceCents =
     snapshotBasePriceCents(pricingSnapshot, tripMeta?.price_cents ?? trip.price_cents) ??
@@ -80,15 +79,86 @@ export default function TripPartyManager({ trip, onClose, canEditAssignments, se
   const priceLabelAmount =
     formatCurrencyFromCents(basePriceCents, priceLabelCurrency) ?? `$${(basePriceCents / 100).toFixed(2)}`
   const priceLabel = `${priceLabelAmount} per guest`
+  const scheduleLabel = useMemo(() => {
+    const startDate = new Date(startValue)
+    if (Number.isNaN(startDate.getTime())) {
+      return 'Unscheduled'
+    }
+    if (timingMode === 'single_day') {
+      const startTime = startDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+      const hours =
+        durationHours ??
+        Math.max(1, Math.round((new Date(endValue).getTime() - startDate.getTime()) / 3600000))
+      return `${startDate.toLocaleDateString()} · ${startTime} · ${hours}h`
+    }
+    const endDate = new Date(endValue)
+    const days =
+      durationDays ??
+      Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / 86400000))
+    const startLabel = startDate.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+    const endLabel = Number.isNaN(endDate.getTime())
+      ? ''
+      : endDate.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+    const durationLabel = ` · ${days} day${days === 1 ? '' : 's'}`
+    return endLabel ? `${startLabel} → ${endLabel}${durationLabel}` : `${startLabel}${durationLabel}`
+  }, [durationDays, durationHours, endValue, startValue, timingMode])
   const formTrip = useMemo(() => ({
     id: trip.id,
     title,
     location: locationLabel,
-    start: tripMeta?.start ?? trip.start,
-    end: tripMeta?.end ?? trip.end,
+    start: startValue,
+    end: endValue,
     price_cents: tripMeta?.price_cents ?? trip.price_cents,
     pricing_snapshot: pricingSnapshot,
-  }), [trip.id, title, locationLabel, tripMeta?.start, tripMeta?.end, trip.start, trip.end, tripMeta?.price_cents, trip.price_cents, pricingSnapshot])
+    timing_mode: timingMode,
+    duration_hours: durationHours,
+    duration_days: durationDays,
+  }), [trip.id, title, locationLabel, startValue, endValue, tripMeta?.price_cents, trip.price_cents, pricingSnapshot, timingMode, durationHours, durationDays])
+  const fallbackTripDetail: TripDetail = useMemo(() => ({
+    id: trip.id,
+    guide_service: tripMeta?.guide_service ?? trip.guide_service ?? serviceId ?? 0,
+    guide_service_name: tripMeta?.guide_service_name ?? trip.guide_service_name ?? '',
+    title,
+    location: locationLabel,
+    start: startValue,
+    end: endValue,
+    price_cents: tripMeta?.price_cents ?? trip.price_cents,
+    difficulty: tripMeta?.difficulty ?? null,
+    description: tripMeta?.description ?? '',
+    duration_hours: durationHours,
+    duration_days: durationDays,
+    timing_mode: timingMode,
+    target_clients_per_guide: tripMeta?.target_clients_per_guide ?? trip.target_clients_per_guide ?? null,
+    notes: tripMeta?.notes ?? '',
+    parties,
+    assignments,
+    requires_assignment: requiresAssignment,
+    pricing_snapshot: pricingSnapshot,
+    template_id: tripMeta?.template_id ?? null,
+    template_snapshot: tripMeta?.template_snapshot ?? null,
+  }), [
+    trip.id,
+    trip.guide_service,
+    trip.guide_service_name,
+    title,
+    locationLabel,
+    startValue,
+    endValue,
+    tripMeta,
+    durationHours,
+    durationDays,
+    timingMode,
+    parties,
+    assignments,
+    requiresAssignment,
+    pricingSnapshot,
+    trip.price_cents,
+    trip.target_clients_per_guide,
+    serviceId,
+  ])
+
+  const editableTripDetail = tripDetailQuery.data ?? fallbackTripDetail
+
   useEffect(() => {
     setSelectedGuideIds(assignments.map((assignment) => assignment.guide_id))
   }, [assignments])
@@ -162,25 +232,70 @@ export default function TripPartyManager({ trip, onClose, canEditAssignments, se
     return () => window.clearTimeout(timeout)
   }, [showSaved])
 
+  const handleTripSaved = useCallback((updatedTrip: TripDetail) => {
+    setShowEditForm(false)
+    queryClient.setQueryData(['trip-detail', trip.id], updatedTrip)
+    if (Array.isArray(updatedTrip.parties)) {
+      queryClient.setQueryData(['trip-parties', trip.id], updatedTrip.parties)
+    }
+    queryClient.setQueryData(['trips'], (existing: any) => {
+      if (Array.isArray(existing)) {
+        return existing.map((item: any) => (item.id === updatedTrip.id ? { ...item, ...updatedTrip } : item))
+      }
+      if (Array.isArray(existing?.results)) {
+        return {
+          ...existing,
+          results: existing.results.map((item: any) =>
+            item.id === updatedTrip.id ? { ...item, ...updatedTrip } : item
+          ),
+        }
+      }
+      return existing
+    })
+    onTripUpdate?.(updatedTrip)
+  }, [onTripUpdate, queryClient, trip.id])
+
+  if (showEditForm && editableTripDetail) {
+    return (
+      <EditTripForm
+        trip={editableTripDetail}
+        onClose={() => setShowEditForm(false)}
+        onSaved={handleTripSaved}
+      />
+    )
+  }
+
   return (
     <section className="border rounded-lg bg-white shadow-md p-6 space-y-6">
       <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold">Manage {title}</h2>
           <p className="text-sm text-gray-600">
-            {locationLabel ? `${locationLabel} · ` : ''}{startDate.toLocaleDateString()} · {priceLabel}
+            {locationLabel ? `${locationLabel} · ` : ''}{scheduleLabel} · {priceLabel}
           </p>
           {tripMeta?.guide_service_name && (
             <p className="text-xs text-gray-500">{tripMeta.guide_service_name}</p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-sm text-gray-600 underline self-start md:self-center"
-        >
-          Close
-        </button>
+        <div className="flex items-center gap-3 self-start md:self-center">
+          {canEditAssignments && (
+            <button
+              type="button"
+              onClick={() => setShowEditForm(true)}
+              disabled={tripDetailQuery.isLoading}
+              className="text-sm text-blue-600 underline disabled:opacity-50"
+            >
+              Edit trip details
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-sm text-gray-600 underline"
+          >
+            Close
+          </button>
+        </div>
       </header>
 
       <section className="bg-slate-100 border border-slate-200 rounded-md px-4 py-3 space-y-2">

@@ -19,7 +19,7 @@ def trip(db):
         slug="summit-guides",
         contact_email="hello@summit.test",
     )
-    start = timezone.now() + timedelta(days=7)
+    start = (timezone.now() + timedelta(days=7)).replace(hour=9, minute=0, second=0, microsecond=0)
     end = start + timedelta(days=1)
     return Trip.objects.create(
         guide_service=service,
@@ -27,6 +27,8 @@ def trip(db):
         location="Mt. Baker",
         start=start,
         end=end,
+        timing_mode=Trip.MULTI_DAY,
+        duration_days=1,
         pricing_snapshot=build_single_tier_snapshot(18000),
     )
 

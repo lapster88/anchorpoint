@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -6,6 +8,13 @@ from .pricing import build_single_tier_snapshot, snapshot_base_price_cents
 
 
 class Trip(models.Model):
+    SINGLE_DAY = "single_day"
+    MULTI_DAY = "multi_day"
+    TIMING_MODE_CHOICES = [
+        (SINGLE_DAY, "Single day"),
+        (MULTI_DAY, "Multi day"),
+    ]
+
     guide_service = models.ForeignKey('orgs.GuideService', on_delete=models.CASCADE)
     title = models.CharField(max_length=200)
     location = models.CharField(max_length=200)
@@ -14,7 +23,13 @@ class Trip(models.Model):
     difficulty = models.CharField(max_length=50, blank=True)
     description = models.TextField(blank=True)
     duration_hours = models.PositiveIntegerField(null=True, blank=True)
+    duration_days = models.PositiveIntegerField(null=True, blank=True)
     target_clients_per_guide = models.PositiveIntegerField(null=True, blank=True)
+    timing_mode = models.CharField(
+        max_length=20,
+        choices=TIMING_MODE_CHOICES,
+        default=MULTI_DAY,
+    )
     notes = models.TextField(blank=True)
     pricing_snapshot = models.JSONField(blank=True, null=True)
     template_used = models.ForeignKey(
@@ -34,6 +49,23 @@ class Trip(models.Model):
         base = snapshot_base_price_cents(self.pricing_snapshot)
         return base or 0
 
+    def apply_single_day_duration(self):
+        if self.duration_hours is None:
+            raise ValidationError({"duration_hours": "Duration in hours is required for single-day trips."})
+        if self.duration_hours <= 0:
+            raise ValidationError({"duration_hours": "Duration must be greater than zero."})
+        self.duration_days = None
+        self.end = self.start + timedelta(hours=self.duration_hours)
+
+    def apply_multi_day_duration(self):
+        if self.duration_days is None:
+            raise ValidationError({"duration_days": "Duration in days is required for multi-day trips."})
+        if self.duration_days <= 0:
+            raise ValidationError({"duration_days": "Duration must be at least one day."})
+        self.duration_hours = None
+        # Maintain start time and end at same clock time on final day.
+        self.end = self.start + timedelta(days=self.duration_days)
+
     def update_single_tier_pricing(self, price_cents: int, *, currency: str | None = None):
         current = self.pricing_snapshot or {}
         snapshot = build_single_tier_snapshot(
@@ -48,6 +80,14 @@ class Trip(models.Model):
         super().clean()
         if self.start and self.end and self.end <= self.start:
             raise ValidationError({"end": "End time must be after the start time."})
+        if self.timing_mode == self.SINGLE_DAY:
+            if self.duration_hours is None:
+                raise ValidationError({"duration_hours": "Duration in hours is required for single-day trips."})
+            if self.start.date() != self.end.date():
+                raise ValidationError({"end": "Single-day trips must start and end on the same day."})
+        elif self.timing_mode == self.MULTI_DAY:
+            if self.duration_days is None:
+                raise ValidationError({"duration_days": "Duration in days is required for multi-day trips."})
 
     def save(self, *args, **kwargs):
         self.full_clean()
@@ -64,15 +104,25 @@ class Assignment(models.Model):
 
 
 class TripTemplate(models.Model):
+    SINGLE_DAY = Trip.SINGLE_DAY
+    MULTI_DAY = Trip.MULTI_DAY
+    TIMING_MODE_CHOICES = Trip.TIMING_MODE_CHOICES
+
     service = models.ForeignKey(
         'orgs.GuideService',
         on_delete=models.CASCADE,
         related_name='trip_templates',
     )
     title = models.CharField(max_length=200)
-    duration_hours = models.PositiveIntegerField()
+    duration_hours = models.PositiveIntegerField(null=True, blank=True)
+    duration_days = models.PositiveIntegerField(null=True, blank=True)
     location = models.CharField(max_length=200)
     target_clients_per_guide = models.PositiveIntegerField(null=True, blank=True)
+    timing_mode = models.CharField(
+        max_length=20,
+        choices=TIMING_MODE_CHOICES,
+        default=MULTI_DAY,
+    )
     notes = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     created_by = models.ForeignKey(
@@ -118,7 +168,9 @@ class TripTemplate(models.Model):
             "id": self.id,
             "title": self.title,
             "duration_hours": self.duration_hours,
+            "duration_days": self.duration_days,
             "location": self.location,
+            "timing_mode": self.timing_mode,
             "target_clients_per_guide": self.target_clients_per_guide,
             "notes": self.notes,
             "pricing": {

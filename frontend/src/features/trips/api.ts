@@ -33,6 +33,8 @@ export type TripDetail = {
   difficulty: string | null
   description: string
   duration_hours: number | null
+  duration_days: number | null
+  timing_mode: 'single_day' | 'multi_day'
   target_clients_per_guide: number | null
   notes: string | null
   parties: TripPartySummary[]
@@ -48,11 +50,13 @@ export type CreateTripPayload = {
   title?: string
   location?: string
   start: string
-  end: string
+  end?: string
   price_cents?: number
   difficulty?: string | null
   description?: string
   duration_hours?: number
+  duration_days?: number
+  timing_mode?: 'single_day' | 'multi_day'
   target_clients_per_guide?: number
   notes?: string
   template?: number | null
@@ -65,11 +69,22 @@ export async function createTrip(payload: CreateTripPayload): Promise<TripDetail
   return data
 }
 
+export type UpdateTripPayload = Partial<Omit<CreateTripPayload, 'guide_service' | 'template' | 'party' | 'guides'>> & {
+  timing_mode?: 'single_day' | 'multi_day'
+  target_clients_per_guide?: number | null
+}
+
+export async function updateTrip(tripId: number, payload: UpdateTripPayload): Promise<TripDetail> {
+  const { data } = await api.patch<TripDetail>(`/api/trips/${tripId}/`, payload)
+  return data
+}
+
 export type TripTemplateOption = {
   id: number
   service: number
   title: string
-  duration_hours: number
+  duration_hours: number | null
+  duration_days: number | null
   location: string
   pricing_currency: string
   is_deposit_required: boolean
@@ -79,6 +94,7 @@ export type TripTemplateOption = {
     max_guests: number | null
     price_per_guest: string
   }>
+  timing_mode: 'single_day' | 'multi_day'
   target_clients_per_guide: number | null
   notes: string
   is_active: boolean

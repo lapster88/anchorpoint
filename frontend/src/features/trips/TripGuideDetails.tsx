@@ -14,6 +14,9 @@ type TripSummary = {
   guide_service_name: string
   assignments: TripAssignment[]
   requires_assignment: boolean
+  timing_mode?: 'single_day' | 'multi_day'
+  duration_hours?: number | null
+  duration_days?: number | null
 }
 
 type Props = {
@@ -34,13 +37,22 @@ export default function TripGuideDetails({ trip, onClose }: Props){
   const requiresAssignment = detail?.requires_assignment ?? trip.requires_assignment ?? assignments.length === 0
 
   const tripDateRange = useMemo(() => {
-    const start = new Date(detail?.start ?? trip.start)
-    const end = new Date(detail?.end ?? trip.end)
-    const sameDay = start.toDateString() === end.toDateString()
-    if (sameDay) {
-      return `${start.toLocaleString()} – ${end.toLocaleTimeString()}`
+    const timingMode = detail?.timing_mode ?? trip.timing_mode ?? 'multi_day'
+    const startDate = new Date(detail?.start ?? trip.start)
+    const endDate = new Date(detail?.end ?? trip.end)
+    if (timingMode === 'single_day') {
+      const startLabel = startDate.toLocaleString()
+      const durationHours = detail?.duration_hours ?? trip.duration_hours ?? Math.max(
+        1,
+        Math.round((endDate.getTime() - startDate.getTime()) / 3600000)
+      )
+      return `${startLabel} · ${durationHours}h`
     }
-    return `${start.toLocaleString()} → ${end.toLocaleString()}`
+    const days = detail?.duration_days ?? trip.duration_days ?? Math.max(
+      1,
+      Math.round((endDate.getTime() - startDate.getTime()) / 86400000)
+    )
+    return `${startDate.toLocaleString()} → ${endDate.toLocaleString()} · ${days} day${days === 1 ? '' : 's'}`
   }, [detail, trip])
 
   return (

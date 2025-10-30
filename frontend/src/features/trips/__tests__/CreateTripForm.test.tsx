@@ -52,6 +52,9 @@ describe('CreateTripForm', () => {
       price_cents: 15000,
       difficulty: null,
       description: '',
+      duration_hours: 8,
+      duration_days: null,
+      timing_mode: 'single_day',
       target_clients_per_guide: null,
       pricing_snapshot: {
         currency: 'usd',
@@ -85,8 +88,7 @@ describe('CreateTripForm', () => {
 
     await userEvent.type(screen.getByLabelText('Location'), 'Mt. Baker')
     await userEvent.type(screen.getByLabelText('Start'), '2025-10-20T08:00')
-    await userEvent.type(screen.getByLabelText('End'), '2025-10-20T16:00')
-    await userEvent.type(screen.getByLabelText('Duration (hours)'), '8')
+    await userEvent.type(screen.getByLabelText('Duration (days)'), '2')
     await userEvent.type(screen.getByLabelText('Target guests per guide (optional)'), '4')
     await userEvent.type(screen.getByLabelText('Price (USD)'), '0')
     await userEvent.type(screen.getByLabelText(/^Email/), 'guest@example.com')
@@ -111,8 +113,9 @@ describe('CreateTripForm', () => {
     const guideCheckbox = await screen.findByLabelText('Gabe Guide')
     await userEvent.click(guideCheckbox)
     await userEvent.type(screen.getByLabelText('Location'), 'Mt. Baker')
-    await userEvent.type(screen.getByLabelText('Start'), '2025-10-20T08:00')
-    await userEvent.type(screen.getByLabelText('End'), '2025-10-20T16:00')
+    await userEvent.click(screen.getByLabelText(/Single day/))
+    await userEvent.type(screen.getByLabelText('Trip date'), '2025-10-20')
+    await userEvent.type(screen.getByLabelText('Start time'), '08:00')
     await userEvent.type(screen.getByLabelText('Duration (hours)'), '9')
     await userEvent.type(screen.getByLabelText('Target guests per guide (optional)'), '3')
     await userEvent.type(screen.getByLabelText('Price (USD)'), '150')
@@ -135,7 +138,9 @@ describe('CreateTripForm', () => {
     expect(payload.guides).toEqual([10])
     expect(payload.location).toBe('Mt. Baker')
     expect(payload.price_cents).toBe(15000)
+    expect(payload.timing_mode).toBe('single_day')
     expect(payload.duration_hours).toBe(9)
+    expect(payload.duration_days).toBeUndefined()
     expect(payload.target_clients_per_guide).toBe(3)
     // pricing driven by manual entry in this scenario, template not used
     expect(payload.party.primary_guest.email).toBe('guest@example.com')
@@ -152,6 +157,7 @@ describe('CreateTripForm', () => {
         service: 1,
         title: 'Glacier Skills',
         duration_hours: 8,
+        duration_days: null,
         location: 'Mount Baker',
         pricing_currency: 'usd',
         is_deposit_required: true,
@@ -160,6 +166,7 @@ describe('CreateTripForm', () => {
           { min_guests: 1, max_guests: 4, price_per_guest: '150.00' },
           { min_guests: 5, max_guests: null, price_per_guest: '130.00' }
         ],
+        timing_mode: 'single_day',
         target_clients_per_guide: 3,
         notes: 'Bring crampons',
         is_active: true
@@ -171,8 +178,8 @@ describe('CreateTripForm', () => {
     await waitFor(() => expect(listServiceTripTemplates).toHaveBeenCalledWith(1))
 
     await userEvent.selectOptions(screen.getByLabelText('Template'), '55')
-    await userEvent.type(screen.getByLabelText('Start'), '2025-10-20T08:00')
-    await userEvent.type(screen.getByLabelText('End'), '2025-10-20T16:00')
+    await userEvent.type(screen.getByLabelText('Trip date'), '2025-10-20')
+    await userEvent.type(screen.getByLabelText('Start time'), '08:00')
     const priceField = (await screen.findByLabelText(/Price/i)) as HTMLInputElement
     await waitFor(() => expect(Number(priceField.value)).toBeCloseTo(150, 2))
     await userEvent.type(screen.getByLabelText(/^Email/), 'guest@example.com')
@@ -188,9 +195,34 @@ describe('CreateTripForm', () => {
     expect(payload.template).toBe(55)
     expect(payload.price_cents).toBeUndefined()
     expect(payload.price_cents).toBeUndefined()
+    expect(payload.timing_mode).toBe('single_day')
     expect(payload.duration_hours).toBe(8)
+    expect(payload.duration_days).toBeUndefined()
     expect(payload.target_clients_per_guide).toBe(3)
     expect(payload.notes).toBe('Bring crampons')
     expect(payload.location).toBe('Mount Baker')
+  })
+
+  it('submits a multi-day trip payload with derived duration', async () => {
+    renderForm()
+
+    await waitFor(() => expect(listServiceTripTemplates).toHaveBeenCalledWith(1))
+
+    await userEvent.type(screen.getByLabelText('Location'), 'Mt. Rainier')
+    await userEvent.type(screen.getByLabelText('Start'), '2025-11-05T07:30')
+    await userEvent.clear(screen.getByLabelText('Duration (days)'))
+    await userEvent.type(screen.getByLabelText('Duration (days)'), '3')
+    await userEvent.type(screen.getByLabelText('Price (USD)'), '250')
+    await userEvent.type(screen.getByLabelText(/^Email/), 'guest@example.com')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create trip' }))
+
+    await waitFor(() => expect(createTrip).toHaveBeenCalledTimes(1))
+    const payload = createTrip.mock.calls[0][0]
+    expect(payload.timing_mode).toBe('multi_day')
+    expect(payload.duration_days).toBe(3)
+    expect(payload.duration_hours).toBeUndefined()
+    expect(payload.start).toContain('2025-11-05')
+    expect(payload.price_cents).toBe(25000)
   })
 })

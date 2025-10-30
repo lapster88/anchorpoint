@@ -29,15 +29,24 @@ def staff_user(db, service):
     return user
 
 
+def _future_datetime(days: int, hour: int = 9):
+    base = timezone.now() + timezone.timedelta(days=days)
+    return base.replace(hour=hour, minute=0, second=0, microsecond=0)
+
+
 @pytest.fixture
 def booking(db, service):
     guest = GuestProfile.objects.create(email="guest@example.test", first_name="Greta", last_name="Guest")
+    start = _future_datetime(5)
+    end = start + timezone.timedelta(days=1)
     trip = Trip.objects.create(
         guide_service=service,
         title="Alpine Ascent",
         location="Alps",
-        start=timezone.now() + timezone.timedelta(days=5),
-        end=timezone.now() + timezone.timedelta(days=6),
+        start=start,
+        end=end,
+        timing_mode=Trip.MULTI_DAY,
+        duration_days=1,
         pricing_snapshot=build_single_tier_snapshot(50000),
     )
     party = TripParty.objects.create(trip=trip, primary_guest=guest, party_size=2)

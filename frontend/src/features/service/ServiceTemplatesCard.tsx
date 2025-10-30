@@ -13,6 +13,8 @@ import {
 } from './api'
 
 const DEFAULT_CURRENCY = 'usd'
+const SINGLE_DAY = 'single_day'
+const MULTI_DAY = 'multi_day'
 
  type Props = {
   membership: ServiceMembership
@@ -36,6 +38,7 @@ type TierForm = {
 type TemplateForm = {
   title: string
   durationHours: string
+  durationDays: string
   location: string
   currency: string
   depositRequired: boolean
@@ -44,6 +47,7 @@ type TemplateForm = {
   targetGuestsPerGuide: string
   notes: string
   isActive: boolean
+  timingMode: 'single_day' | 'multi_day'
 }
 
 export default function ServiceTemplatesCard({ membership }: Props){
@@ -177,8 +181,11 @@ export default function ServiceTemplatesCard({ membership }: Props){
                   )}
                 </h4>
                 <p className="text-xs text-slate-500">
-                  Location: {template.location} · Duration: {template.duration_hours}h · Target guests per guide:{' '}
-                  {template.target_clients_per_guide ?? '—'}
+                  Location: {template.location} · Duration:{' '}
+                  {template.timing_mode === SINGLE_DAY
+                    ? `${template.duration_hours ?? '—'}h`
+                    : `${template.duration_days ?? '—'} day${template.duration_days === 1 ? '' : 's'}`}{' '}
+                  · Target guests per guide: {template.target_clients_per_guide ?? '—'}
                 </p>
                 <p className="text-xs text-slate-500">
                   First tier: {template.pricing_tiers.length ? formatCurrency(template.pricing_tiers[0].price_per_guest, template.pricing_currency) : '—'}
@@ -375,7 +382,47 @@ function TemplateModal({ mode, template, isSaving, error, onClose, onSubmit }: T
             </label>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium text-slate-700">Trip length</legend>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+              <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="radio"
+                  name="template-timing-mode"
+                  value={SINGLE_DAY}
+                  checked={form.timingMode === SINGLE_DAY}
+                  onChange={() =>
+                    setForm((prev) => ({
+                      ...prev,
+                      timingMode: SINGLE_DAY,
+                      durationHours: prev.durationHours || '8',
+                      durationDays: ''
+                    }))
+                  }
+                />
+                Single day
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="radio"
+                  name="template-timing-mode"
+                  value={MULTI_DAY}
+                  checked={form.timingMode === MULTI_DAY}
+                  onChange={() =>
+                    setForm((prev) => ({
+                      ...prev,
+                      timingMode: MULTI_DAY,
+                      durationDays: prev.durationDays || '2',
+                      durationHours: ''
+                    }))
+                  }
+                />
+                Multi day
+              </label>
+            </div>
+          </fieldset>
+
+          {form.timingMode === SINGLE_DAY ? (
             <label className="text-sm font-medium text-slate-700">
               Duration (hours)
               <input
@@ -387,22 +434,35 @@ function TemplateModal({ mode, template, isSaving, error, onClose, onSubmit }: T
                 onChange={(event) => setForm((prev) => ({ ...prev, durationHours: event.target.value }))}
               />
             </label>
+          ) : (
             <label className="text-sm font-medium text-slate-700">
-              Target guests per guide (optional)
+              Duration (days)
               <input
+                required
                 type="number"
                 min={1}
                 className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-                value={form.targetGuestsPerGuide}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, targetGuestsPerGuide: event.target.value }))
-                }
+                value={form.durationDays}
+                onChange={(event) => setForm((prev) => ({ ...prev, durationDays: event.target.value }))}
               />
-              <span className="mt-1 block text-xs text-slate-500">
-                Helps communicate staffing goals. Guides can exceed this ratio when needed.
-              </span>
             </label>
-          </div>
+          )}
+
+          <label className="text-sm font-medium text-slate-700">
+            Target guests per guide (optional)
+            <input
+              type="number"
+              min={1}
+              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+              value={form.targetGuestsPerGuide}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, targetGuestsPerGuide: event.target.value }))
+              }
+            />
+            <span className="mt-1 block text-xs text-slate-500">
+              Helps communicate staffing goals. Guides can exceed this ratio when needed.
+            </span>
+          </label>
 
           <label className="text-sm font-medium text-slate-700">
             Currency
@@ -564,6 +624,7 @@ function toForm(template?: TripTemplate): TemplateForm {
     return {
       title: '',
       durationHours: '',
+      durationDays: '',
       location: '',
       currency: DEFAULT_CURRENCY,
       depositRequired: false,
@@ -573,7 +634,8 @@ function toForm(template?: TripTemplate): TemplateForm {
       ],
       targetGuestsPerGuide: '',
       notes: '',
-      isActive: true
+      isActive: true,
+      timingMode: SINGLE_DAY
     }
   }
 
@@ -588,6 +650,7 @@ function toForm(template?: TripTemplate): TemplateForm {
   return {
     title: template.title,
     durationHours: template.duration_hours ? String(template.duration_hours) : '',
+    durationDays: template.duration_days ? String(template.duration_days) : '',
     location: template.location,
     currency: template.pricing_currency || DEFAULT_CURRENCY,
     depositRequired: template.is_deposit_required,
@@ -597,14 +660,23 @@ function toForm(template?: TripTemplate): TemplateForm {
       ? String(template.target_clients_per_guide)
       : '',
     notes: template.notes || '',
-    isActive: template.is_active
+    isActive: template.is_active,
+    timingMode: template.timing_mode
   }
 }
 
 function validateForm(form: TemplateForm): string | null {
   if (!form.title.trim()) return 'Title is required.'
   if (!form.location.trim()) return 'Location is required.'
-  if (!form.durationHours.trim() || Number(form.durationHours) < 1) return 'Duration must be at least 1 hour.'
+  if (form.timingMode === SINGLE_DAY) {
+    if (!form.durationHours.trim() || Number(form.durationHours) < 1) {
+      return 'Duration must be at least 1 hour for single-day templates.'
+    }
+  } else {
+    if (!form.durationDays.trim() || Number(form.durationDays) < 1) {
+      return 'Duration must be at least 1 day for multi-day templates.'
+    }
+  }
   if (form.targetGuestsPerGuide.trim()){
     const ratio = Number(form.targetGuestsPerGuide)
     if (Number.isNaN(ratio) || ratio < 1) {
@@ -643,9 +715,13 @@ function validateForm(form: TemplateForm): string | null {
 }
 
 function toPayload(form: TemplateForm): Omit<TripTemplatePayload, 'service'> {
+  const isSingleDay = form.timingMode === SINGLE_DAY
+  const durationHours = isSingleDay ? Number(form.durationHours || '0') : null
+  const durationDays = !isSingleDay ? Number(form.durationDays || '0') : null
   return {
     title: form.title.trim(),
-    duration_hours: Number(form.durationHours || '0'),
+    duration_hours: durationHours,
+    duration_days: durationDays,
     location: form.location.trim(),
     pricing_currency: form.currency.trim() || DEFAULT_CURRENCY,
     is_deposit_required: form.depositRequired,
@@ -655,6 +731,7 @@ function toPayload(form: TemplateForm): Omit<TripTemplatePayload, 'service'> {
       max_guests: parsePositiveInt(tier.maxGuests),
       price_per_guest: String(tier.pricePerGuest)
     })),
+    timing_mode: form.timingMode,
     target_clients_per_guide: form.targetGuestsPerGuide.trim()
       ? Number(form.targetGuestsPerGuide)
       : null,

@@ -27,7 +27,9 @@ def guide_service_b(db):
 
 
 def _create_trip(service, title, start_offset_days=0):
-    start = timezone.now() + timezone.timedelta(days=start_offset_days)
+    start = (timezone.now() + timezone.timedelta(days=start_offset_days)).replace(
+        hour=9, minute=0, second=0, microsecond=0
+    )
     end = start + timezone.timedelta(hours=8)
     return Trip.objects.create(
         guide_service=service,
@@ -35,6 +37,8 @@ def _create_trip(service, title, start_offset_days=0):
         location="Somewhere",
         start=start,
         end=end,
+        timing_mode=Trip.SINGLE_DAY,
+        duration_hours=8,
         pricing_snapshot=build_single_tier_snapshot(50000),
     )
 

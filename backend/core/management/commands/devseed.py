@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.db.utils import ProgrammingError
 from django.utils import timezone
 
 from availability.models import GuideAvailability, GuideAvailabilityShare
@@ -10,6 +11,7 @@ from accounts.models import ServiceMembership, User
 from bookings.models import TripParty, TripPartyGuest, GuestProfile
 from bookings.services.guest_tokens import issue_guest_access_token
 from orgs.models import GuideService
+
 from trips.models import Assignment, Trip, TripTemplate
 from trips.pricing import build_single_tier_snapshot
 
@@ -26,205 +28,216 @@ class Command(BaseCommand):
         if not settings.DEBUG:
             raise CommandError("Refusing to seed data while DEBUG is False.")
 
-        with transaction.atomic():
-            self.stdout.write(self.style.MIGRATE_HEADING("Creating guide services"))
-            summit_service = self._ensure_service(
-                slug="summit-guides",
-                name="Summit Guides",
-                email="hello@summitguides.test",
-                phone="555-0100",
-            )
-            desert_service = self._ensure_service(
-                slug="desert-adventures",
-                name="Desert Adventures Co.",
-                email="info@desertadventures.test",
-                phone="555-0200",
-            )
+        try:
+            with transaction.atomic():
+                self.stdout.write(self.style.MIGRATE_HEADING("Creating guide services"))
+                summit_service = self._ensure_service(
+                    slug="summit-guides",
+                    name="Summit Guides",
+                    email="hello@summitguides.test",
+                    phone="555-0100",
+                )
+                desert_service = self._ensure_service(
+                    slug="desert-adventures",
+                    name="Desert Adventures Co.",
+                    email="info@desertadventures.test",
+                    phone="555-0200",
+                )
 
-            self.stdout.write(self.style.MIGRATE_HEADING("Creating users & memberships"))
-            owner = self._ensure_user(
-                email="owner@summitguides.test",
-                first_name="Olivia",
-                last_name="Owner",
-                display_name="Olivia Owner",
-            )
-            manager = self._ensure_user(
-                email="manager@summitguides.test",
-                first_name="Morgan",
-                last_name="Manager",
-                display_name="Morgan Manager",
-            )
-            guide = self._ensure_user(
-                email="guide@summitguides.test",
-                first_name="Gabe",
-                last_name="Guide",
-                display_name="Gabe Guide",
-            )
-            flex_guide = self._ensure_user(
-                email="flex@summitguides.test",
-                first_name="Finn",
-                last_name="Flexible",
-                display_name="Finn Flexible",
-            )
-            greta_guest, _ = GuestProfile.objects.update_or_create(
-                email="guest@example.test",
-                defaults={
-                    "first_name": "Greta",
-                    "last_name": "Guest",
-                    "phone": "555-0300",
-                },
-            )
-            friend_guest, _ = GuestProfile.objects.update_or_create(
-                email="friend@example.test",
-                defaults={
-                    "first_name": "Frank",
-                    "last_name": "Friend",
-                    "phone": "555-0301",
-                },
-            )
+                self.stdout.write(self.style.MIGRATE_HEADING("Creating users & memberships"))
+                owner = self._ensure_user(
+                    email="owner@summitguides.test",
+                    first_name="Olivia",
+                    last_name="Owner",
+                    display_name="Olivia Owner",
+                )
+                manager = self._ensure_user(
+                    email="manager@summitguides.test",
+                    first_name="Morgan",
+                    last_name="Manager",
+                    display_name="Morgan Manager",
+                )
+                guide = self._ensure_user(
+                    email="guide@summitguides.test",
+                    first_name="Gabe",
+                    last_name="Guide",
+                    display_name="Gabe Guide",
+                )
+                flex_guide = self._ensure_user(
+                    email="flex@summitguides.test",
+                    first_name="Finn",
+                    last_name="Flexible",
+                    display_name="Finn Flexible",
+                )
+                greta_guest, _ = GuestProfile.objects.update_or_create(
+                    email="guest@example.test",
+                    defaults={
+                        "first_name": "Greta",
+                        "last_name": "Guest",
+                        "phone": "555-0300",
+                    },
+                )
+                friend_guest, _ = GuestProfile.objects.update_or_create(
+                    email="friend@example.test",
+                    defaults={
+                        "first_name": "Frank",
+                        "last_name": "Friend",
+                        "phone": "555-0301",
+                    },
+                )
 
-            self._ensure_membership(owner, summit_service, ServiceMembership.OWNER)
-            self._ensure_membership(manager, summit_service, ServiceMembership.MANAGER)
-            self._ensure_membership(guide, summit_service, ServiceMembership.GUIDE)
-            self._ensure_membership(flex_guide, summit_service, ServiceMembership.GUIDE)
-            self._ensure_membership(flex_guide, desert_service, ServiceMembership.GUIDE)
+                self._ensure_membership(owner, summit_service, ServiceMembership.OWNER)
+                self._ensure_membership(manager, summit_service, ServiceMembership.MANAGER)
+                self._ensure_membership(guide, summit_service, ServiceMembership.GUIDE)
+                self._ensure_membership(flex_guide, summit_service, ServiceMembership.GUIDE)
+                self._ensure_membership(flex_guide, desert_service, ServiceMembership.GUIDE)
 
-            self.stdout.write(self.style.MIGRATE_HEADING("Ensuring admin superuser"))
-            self._ensure_superuser()
+                self.stdout.write(self.style.MIGRATE_HEADING("Ensuring admin superuser"))
+                self._ensure_superuser()
 
-            self.stdout.write(self.style.MIGRATE_HEADING("Cleaning old trip + availability data"))
-            Assignment.objects.filter(guide__in=[guide, flex_guide]).delete()
-            Trip.objects.filter(guide_service__in=[summit_service, desert_service], title__in=[
-                "Intro to Trad Climbing",
-                "Glacier Travel Fundamentals",
-                "Desert Tower Weekend",
-            ]).delete()
-            GuideAvailability.objects.filter(
-                guide__in=[guide, flex_guide],
-                source=GuideAvailability.SOURCE_ASSIGNMENT,
-            ).delete()
-
-            tz = timezone.get_current_timezone()
-            self.stdout.write(self.style.MIGRATE_HEADING("Creating trips & assignments"))
-            trad_trip = self._create_trip(
-                guide_service=summit_service,
-                title="Intro to Trad Climbing",
-                location="Index, WA",
-                start=timezone.make_aware(datetime(2025, 10, 20, 8, 0), tz),
-                end=timezone.make_aware(datetime(2025, 10, 20, 16, 0), tz),
-                price_cents=45000,
-                difficulty="Beginner",
-                duration_hours=8,
-                target_clients_per_guide=4,
-                notes="Full day trad fundamentals session.",
-            )
-            glacier_trip = self._create_trip(
-                guide_service=summit_service,
-                title="Glacier Travel Fundamentals",
-                location="Mt. Baker, WA",
-                start=timezone.make_aware(datetime(2025, 10, 28, 6, 0), tz),
-                end=timezone.make_aware(datetime(2025, 10, 30, 18, 0), tz),
-                price_cents=89000,
-                difficulty="Intermediate",
-                duration_hours=48,
-                target_clients_per_guide=3,
-                notes="Includes snow school and summit attempt.",
-            )
-            desert_trip = self._create_trip(
-                guide_service=desert_service,
-                title="Desert Tower Weekend",
-                location="Moab, UT",
-                start=timezone.make_aware(datetime(2025, 10, 24, 8, 0), tz),
-                end=timezone.make_aware(datetime(2025, 10, 25, 20, 0), tz),
-                price_cents=72000,
-                difficulty="Advanced",
-                duration_hours=20,
-                target_clients_per_guide=2,
-                notes="Two-day tower objective with overnight camp.",
-            )
-
-            Assignment.objects.create(trip=trad_trip, guide=guide)
-            Assignment.objects.create(trip=glacier_trip, guide=guide)
-            Assignment.objects.create(trip=desert_trip, guide=flex_guide)
-
-            TripTemplate.objects.update_or_create(
-                service=summit_service,
-                title="Glacier Skills Day",
-                defaults={
-                    "duration_hours": 8,
-                    "location": "Mount Baker, WA",
-                    "pricing_currency": "usd",
-                    "is_deposit_required": True,
-                    "deposit_percent": 25,
-                    "pricing_tiers": [
-                        {"min_guests": 1, "max_guests": 2, "price_per_guest": "150.00"},
-                        {"min_guests": 3, "max_guests": None, "price_per_guest": "120.00"},
+                self.stdout.write(self.style.MIGRATE_HEADING("Cleaning old trip + availability data"))
+                Assignment.objects.filter(guide__in=[guide, flex_guide]).delete()
+                Trip.objects.filter(
+                    guide_service__in=[summit_service, desert_service],
+                    title__in=[
+                        "Intro to Trad Climbing",
+                        "Glacier Travel Fundamentals",
+                        "Desert Tower Weekend",
                     ],
-                    "target_clients_per_guide": 3,
-                    "notes": "Bring glacier kits and crampons.",
-                    "created_by": owner,
-                    "is_active": True,
-                },
-            )
+                ).delete()
+                GuideAvailability.objects.filter(
+                    guide__in=[guide, flex_guide],
+                    source=GuideAvailability.SOURCE_ASSIGNMENT,
+                ).delete()
 
-            self.stdout.write(self.style.MIGRATE_HEADING("Creating manual availability and bookings"))
-            GuideAvailability.objects.filter(
-                guide__in=[guide, flex_guide],
-                source=GuideAvailability.SOURCE_MANUAL,
-            ).delete()
-            GuideAvailability.objects.create(
-                guide=guide,
-                guide_service=summit_service,
-                start=timezone.make_aware(datetime(2025, 10, 22, 8, 0), tz),
-                end=timezone.make_aware(datetime(2025, 10, 22, 17, 0), tz),
-                is_available=False,
-                visibility=GuideAvailability.VISIBILITY_DETAIL,
-                note="Open for custom trips",
-            )
-            GuideAvailability.objects.filter(
-                guide=guide,
-                note="Family in town",
-                source=GuideAvailability.SOURCE_MANUAL,
-            ).delete()
-            off_day = GuideAvailability.objects.create(
-                guide=guide,
-                guide_service=summit_service,
-                start=timezone.make_aware(datetime(2025, 10, 26, 0, 0), tz),
-                end=timezone.make_aware(datetime(2025, 10, 27, 0, 0), tz),
-                is_available=False,
-                visibility=GuideAvailability.VISIBILITY_BUSY,
-                note="Family in town",
-            )
-            GuideAvailabilityShare.objects.get_or_create(
-                availability=off_day,
-                guide_service=desert_service,
-                defaults={"visibility": GuideAvailability.VISIBILITY_BUSY},
-            )
+                tz = timezone.get_current_timezone()
+                self.stdout.write(self.style.MIGRATE_HEADING("Creating trips & assignments"))
+                trad_trip = self._create_trip(
+                    guide_service=summit_service,
+                    title="Intro to Trad Climbing",
+                    location="Index, WA",
+                    start=timezone.make_aware(datetime(2025, 10, 20, 8, 0), tz),
+                    price_cents=45000,
+                    difficulty="Beginner",
+                    timing_mode=Trip.SINGLE_DAY,
+                    duration_hours=8,
+                    target_clients_per_guide=4,
+                    notes="Full day trad fundamentals session.",
+                )
+                glacier_trip = self._create_trip(
+                    guide_service=summit_service,
+                    title="Glacier Travel Fundamentals",
+                    location="Mt. Baker, WA",
+                    start=timezone.make_aware(datetime(2025, 10, 28, 6, 0), tz),
+                    price_cents=89000,
+                    difficulty="Intermediate",
+                    timing_mode=Trip.MULTI_DAY,
+                    duration_days=3,
+                    target_clients_per_guide=3,
+                    notes="Includes snow school and summit attempt.",
+                )
+                desert_trip = self._create_trip(
+                    guide_service=desert_service,
+                    title="Desert Tower Weekend",
+                    location="Moab, UT",
+                    start=timezone.make_aware(datetime(2025, 10, 24, 8, 0), tz),
+                    price_cents=72000,
+                    difficulty="Advanced",
+                    timing_mode=Trip.MULTI_DAY,
+                    duration_days=2,
+                    target_clients_per_guide=2,
+                    notes="Two-day tower objective with overnight camp.",
+                )
 
-            TripParty.objects.all().delete()
+                Assignment.objects.create(trip=trad_trip, guide=guide)
+                Assignment.objects.create(trip=glacier_trip, guide=guide)
+                Assignment.objects.create(trip=desert_trip, guide=flex_guide)
 
-            party = TripParty.objects.create(
-                trip=trad_trip,
-                primary_guest=greta_guest,
-                party_size=2,
-                payment_status=TripParty.PAID,
-                info_status=TripParty.INFO_COMPLETE,
-                waiver_status=TripParty.WAIVER_SIGNED,
-                last_guest_activity_at=timezone.now(),
-            )
-            TripPartyGuest.objects.create(party=party, guest=greta_guest, is_primary=True)
-            TripPartyGuest.objects.create(party=party, guest=friend_guest, is_primary=False)
+                TripTemplate.objects.update_or_create(
+                    service=summit_service,
+                    title="Glacier Skills Day",
+                    defaults={
+                        "duration_hours": 8,
+                        "location": "Mount Baker, WA",
+                        "pricing_currency": "usd",
+                        "is_deposit_required": True,
+                        "deposit_percent": 25,
+                        "pricing_tiers": [
+                            {"min_guests": 1, "max_guests": 2, "price_per_guest": "150.00"},
+                            {"min_guests": 3, "max_guests": None, "price_per_guest": "120.00"},
+                        ],
+                        "timing_mode": Trip.SINGLE_DAY,
+                        "target_clients_per_guide": 3,
+                        "notes": "Bring glacier kits and crampons.",
+                        "created_by": owner,
+                        "is_active": True,
+                        "duration_hours": 8,
+                        "duration_days": None,
+                    },
+                )
 
-            issue_guest_access_token(
-                guest=greta_guest,
-                party=party,
-                expires_at=trad_trip.end + timedelta(days=1),
-                single_use=False,
-            )
+                self.stdout.write(self.style.MIGRATE_HEADING("Creating manual availability and bookings"))
+                GuideAvailability.objects.filter(
+                    guide__in=[guide, flex_guide],
+                    source=GuideAvailability.SOURCE_MANUAL,
+                ).delete()
+                GuideAvailability.objects.create(
+                    guide=guide,
+                    guide_service=summit_service,
+                    start=timezone.make_aware(datetime(2025, 10, 22, 8, 0), tz),
+                    end=timezone.make_aware(datetime(2025, 10, 22, 17, 0), tz),
+                    is_available=False,
+                    visibility=GuideAvailability.VISIBILITY_DETAIL,
+                    note="Open for custom trips",
+                )
+                GuideAvailability.objects.filter(
+                    guide=guide,
+                    note="Family in town",
+                    source=GuideAvailability.SOURCE_MANUAL,
+                ).delete()
+                off_day = GuideAvailability.objects.create(
+                    guide=guide,
+                    guide_service=summit_service,
+                    start=timezone.make_aware(datetime(2025, 10, 26, 0, 0), tz),
+                    end=timezone.make_aware(datetime(2025, 10, 27, 0, 0), tz),
+                    is_available=False,
+                    visibility=GuideAvailability.VISIBILITY_BUSY,
+                    note="Family in town",
+                )
+                GuideAvailabilityShare.objects.get_or_create(
+                    availability=off_day,
+                    guide_service=desert_service,
+                    defaults={"visibility": GuideAvailability.VISIBILITY_BUSY},
+                )
 
-        self.stdout.write(self.style.SUCCESS("Development seed data created."))
-        self.stdout.write(self.style.NOTICE(f"Sample login accounts use password: {SEED_PASSWORD}"))
-        self.stdout.write(self.style.NOTICE(f"Admin superuser {SUPERUSER_EMAIL} password: {SUPERUSER_PASSWORD}"))
+                TripParty.objects.all().delete()
+
+                party = TripParty.objects.create(
+                    trip=trad_trip,
+                    primary_guest=greta_guest,
+                    party_size=2,
+                    payment_status=TripParty.PAID,
+                    info_status=TripParty.INFO_COMPLETE,
+                    waiver_status=TripParty.WAIVER_SIGNED,
+                    last_guest_activity_at=timezone.now(),
+                )
+                TripPartyGuest.objects.create(party=party, guest=greta_guest, is_primary=True)
+                TripPartyGuest.objects.create(party=party, guest=friend_guest, is_primary=False)
+
+                issue_guest_access_token(
+                    guest=greta_guest,
+                    party=party,
+                    expires_at=trad_trip.end + timedelta(days=1),
+                    single_use=False,
+                )
+
+            self.stdout.write(self.style.SUCCESS("Development seed data created."))
+            self.stdout.write(self.style.NOTICE(f"Sample login accounts use password: {SEED_PASSWORD}"))
+            self.stdout.write(self.style.NOTICE(f"Admin superuser {SUPERUSER_EMAIL} password: {SUPERUSER_PASSWORD}"))
+        except ProgrammingError as exc:
+            raise CommandError(
+                "Database schema is out of date. Run `python manage.py migrate` before devseed."
+            ) from exc
 
     def _ensure_service(self, slug: str, name: str, email: str, phone: str) -> GuideService:
         service, _ = GuideService.objects.get_or_create(
@@ -297,22 +310,45 @@ class Command(BaseCommand):
         title: str,
         location: str,
         start,
-        end,
+        end=None,
         price_cents: int,
         difficulty: str,
+        timing_mode: str = Trip.MULTI_DAY,
         duration_hours: int | None = None,
+        duration_days: int | None = None,
         target_clients_per_guide: int | None = None,
         notes: str = "",
     ) -> Trip:
+        if timing_mode == Trip.SINGLE_DAY:
+            if duration_hours is None:
+                if end:
+                    delta = end - start
+                    duration_hours = max(1, int(round(delta.total_seconds() / 3600)))
+                else:
+                    duration_hours = 8
+            computed_end = end or start + timedelta(hours=duration_hours)
+            duration_days = None
+        else:
+            if duration_days is None:
+                if end:
+                    delta = end - start
+                    duration_days = max(1, int(round(delta.total_seconds() / 86400)))
+                else:
+                    duration_days = 1
+            computed_end = end or start + timedelta(days=duration_days)
+            duration_hours = None
+
         return Trip.objects.create(
             guide_service=guide_service,
             title=title,
             location=location,
             start=start,
-            end=end,
+            end=computed_end,
             difficulty=difficulty,
             description=f"Sample itinerary for {title}.",
+            timing_mode=timing_mode,
             duration_hours=duration_hours,
+            duration_days=duration_days,
             target_clients_per_guide=target_clients_per_guide,
             notes=notes,
             pricing_snapshot=build_single_tier_snapshot(price_cents),

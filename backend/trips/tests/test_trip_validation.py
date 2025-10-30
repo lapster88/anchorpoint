@@ -26,6 +26,8 @@ def test_trip_end_must_be_after_start(guide_service):
             location="Misty Mountains",
             start=start,
             end=start - timezone.timedelta(hours=1),
+            timing_mode=Trip.SINGLE_DAY,
+            duration_hours=1,
             pricing_snapshot=build_single_tier_snapshot(15000),
         )
 

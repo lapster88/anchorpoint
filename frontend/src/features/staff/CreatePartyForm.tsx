@@ -16,6 +16,9 @@ export type TripSummary = {
   guide_service_name?: string
   pricing_snapshot?: TripPricingSnapshot | null
   target_clients_per_guide?: number | null
+  timing_mode?: 'single_day' | 'multi_day'
+  duration_hours?: number | null
+  duration_days?: number | null
 }
 
 type Props = {
@@ -104,6 +107,18 @@ export default function CreatePartyForm({ trip, onClose, onCreated }: Props){
   )
   const currency = trip.pricing_snapshot?.currency ?? 'USD'
   const priceLabel = formatCurrencyFromCents(basePriceCents, currency) ?? `$${(basePriceCents / 100).toFixed(2)}`
+  const scheduleLabel = useMemo(() => {
+    const mode = trip.timing_mode ?? 'multi_day'
+    const startDate = new Date(trip.start)
+    if (mode === 'single_day') {
+      const startTime = startDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+      const hours = trip.duration_hours ?? Math.max(1, Math.round((new Date(trip.end).getTime() - startDate.getTime()) / 3600000))
+      return `${startDate.toLocaleDateString()} · ${startTime} · ${hours}h`
+    }
+    const endDate = new Date(trip.end)
+    const deltaDays = trip.duration_days ?? Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / 86400000))
+    return `${startDate.toLocaleDateString()} → ${endDate.toLocaleDateString()} · ${deltaDays} day${deltaDays === 1 ? '' : 's'}`
+  }, [trip.duration_days, trip.duration_hours, trip.end, trip.start, trip.timing_mode])
 
   const paymentLink = result?.payment_url || ''
   const guestLink = result?.guest_portal_url || ''
@@ -113,7 +128,7 @@ export default function CreatePartyForm({ trip, onClose, onCreated }: Props){
       <header className="space-y-1">
         <h2 className="text-xl font-semibold">Create party for {trip.title}</h2>
         <p className="text-sm text-gray-600">
-          Trip date: {new Date(trip.start).toLocaleDateString()} · {priceLabel ?? '—'} per guest
+          {scheduleLabel} · {priceLabel ?? '—'} per guest
         </p>
       </header>
 

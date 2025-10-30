@@ -192,12 +192,15 @@ def test_deactivating_membership_removes_future_assignments(api_client, service)
         role=ServiceMembership.GUIDE,
         is_active=True,
     )
+    start = (timezone.now() + timedelta(days=3)).replace(hour=9, minute=0, second=0, microsecond=0)
     trip = Trip.objects.create(
         guide_service=service,
         title="Glacier Day",
         location="Mt. Baker",
-        start=timezone.now() + timedelta(days=3),
-        end=timezone.now() + timedelta(days=4),
+        start=start,
+        end=start + timedelta(days=1),
+        timing_mode=Trip.MULTI_DAY,
+        duration_days=1,
         pricing_snapshot=build_single_tier_snapshot(15000),
     )
     Assignment.objects.create(trip=trip, guide=guide)

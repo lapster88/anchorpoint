@@ -25,6 +25,7 @@ from .pricing import select_price_per_guest_cents
 from .serializers import (
     TripSerializer,
     TripCreateSerializer,
+    TripUpdateSerializer,
     GuideSummarySerializer,
     TripTemplateSerializer,
 )
@@ -86,6 +87,8 @@ class TripViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == "create":
             return TripCreateSerializer
+        if self.action in {"update", "partial_update"}:
+            return TripUpdateSerializer
         return super().get_serializer_class()
 
     def _create_party_instance(self, *, trip: Trip, party_data: dict) -> TripParty:
@@ -388,11 +391,13 @@ class TripTemplateViewSet(viewsets.ModelViewSet):
             service=template.service,
             title=new_title,
             duration_hours=template.duration_hours,
+            duration_days=template.duration_days,
             location=template.location,
             pricing_currency=template.pricing_currency,
             is_deposit_required=template.is_deposit_required,
             deposit_percent=template.deposit_percent,
             pricing_tiers=template.pricing_tiers,
+            timing_mode=template.timing_mode,
             target_clients_per_guide=template.target_clients_per_guide,
             notes=template.notes,
             is_active=False,

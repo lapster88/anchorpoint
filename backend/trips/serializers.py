@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from rest_framework import serializers
 
 from accounts.models import ServiceMembership, User
@@ -28,6 +30,8 @@ class TripSerializer(serializers.ModelSerializer):
             "difficulty",
             "description",
             "duration_hours",
+            "duration_days",
+            "timing_mode",
             "target_clients_per_guide",
             "notes",
             "pricing_snapshot",
@@ -45,6 +49,7 @@ class TripSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "title": {"required": False},
             "location": {"required": False},
+            "end": {"required": False},
         }
 
     def get_assignments(self, obj: Trip):
@@ -93,7 +98,7 @@ class TripCreateSerializer(TripSerializer):
                 validated_data["title"] = template.title
             if not validated_data.get("location"):
                 validated_data["location"] = template.location
-            validated_data.setdefault("duration_hours", template.duration_hours)
+            validated_data.setdefault("timing_mode", template.timing_mode)
             validated_data.setdefault("target_clients_per_guide", template.target_clients_per_guide)
             if not validated_data.get("notes"):
                 validated_data["notes"] = template.notes
@@ -129,9 +134,52 @@ class TripCreateSerializer(TripSerializer):
             raise serializers.ValidationError({"template": "Template is no longer active."})
         if template is None and price_cents in (None, "", 0):
             raise serializers.ValidationError({"price_cents": "Price per guest is required when no template pricing is selected."})
+        timing_mode = attrs.get("timing_mode") or (template.timing_mode if template else Trip.MULTI_DAY)
+        attrs["timing_mode"] = timing_mode
+
+        if template is not None:
+            if timing_mode == Trip.SINGLE_DAY:
+                attrs.setdefault("duration_hours", template.duration_hours)
+                attrs["duration_days"] = None
+            else:
+                attrs.setdefault("duration_days", template.duration_days or 1)
+                attrs["duration_hours"] = None
+
         ratio = attrs.get("target_clients_per_guide")
         if ratio is not None and ratio <= 0:
             raise serializers.ValidationError({"target_clients_per_guide": "Enter a value greater than zero."})
+
+        start = attrs.get("start")
+        if not start:
+            raise serializers.ValidationError({"start": "Start time is required."})
+
+        if timing_mode == Trip.SINGLE_DAY:
+            duration_hours = attrs.get("duration_hours")
+            if duration_hours in (None, "", 0):
+                raise serializers.ValidationError({"duration_hours": "Duration in hours is required for single-day trips."})
+            try:
+                duration_hours = int(duration_hours)
+            except (TypeError, ValueError):
+                raise serializers.ValidationError({"duration_hours": "Duration must be a positive integer."})
+            if duration_hours <= 0:
+                raise serializers.ValidationError({"duration_hours": "Duration must be greater than zero."})
+            attrs["duration_hours"] = duration_hours
+            attrs["duration_days"] = None
+            attrs["end"] = start + timedelta(hours=duration_hours)
+        else:
+            duration_days = attrs.get("duration_days")
+            if duration_days in (None, "", 0):
+                raise serializers.ValidationError({"duration_days": "Duration in days is required for multi-day trips."})
+            try:
+                duration_days = int(duration_days)
+            except (TypeError, ValueError):
+                raise serializers.ValidationError({"duration_days": "Duration must be a positive integer."})
+            if duration_days <= 0:
+                raise serializers.ValidationError({"duration_days": "Duration must be at least one day."})
+            attrs["duration_days"] = duration_days
+            attrs["duration_hours"] = None
+            attrs["end"] = start + timedelta(days=duration_days)
+
         if not template:
             if not attrs.get("title"):
                 raise serializers.ValidationError({"title": "This field is required."})
@@ -163,6 +211,62 @@ class GuideSummarySerializer(serializers.ModelSerializer):
         fields = ["id", "display_name", "first_name", "last_name", "email"]
 
 
+class TripUpdateSerializer(TripSerializer):
+    price_cents = serializers.IntegerField(min_value=1, required=False)
+
+    class Meta(TripSerializer.Meta):
+        read_only_fields = TripSerializer.Meta.read_only_fields
+
+    def validate(self, attrs):
+        instance: Trip = self.instance
+        if instance is None:
+            return super().validate(attrs)
+
+        start = attrs.get("start", instance.start)
+        timing_mode = attrs.get("timing_mode", instance.timing_mode)
+
+        if timing_mode == Trip.SINGLE_DAY:
+            duration_hours = attrs.get("duration_hours", instance.duration_hours)
+            if duration_hours in (None, "", 0):
+                raise serializers.ValidationError({"duration_hours": "Duration in hours is required for single-day trips."})
+            try:
+                duration_hours = int(duration_hours)
+            except (TypeError, ValueError):
+                raise serializers.ValidationError({"duration_hours": "Duration must be a positive integer."})
+            if duration_hours <= 0:
+                raise serializers.ValidationError({"duration_hours": "Duration must be greater than zero."})
+            attrs["timing_mode"] = Trip.SINGLE_DAY
+            attrs["duration_hours"] = duration_hours
+            attrs["duration_days"] = None
+            attrs["end"] = start + timedelta(hours=duration_hours)
+        else:
+            duration_days = attrs.get("duration_days", instance.duration_days)
+            if duration_days in (None, "", 0):
+                raise serializers.ValidationError({"duration_days": "Duration in days is required for multi-day trips."})
+            try:
+                duration_days = int(duration_days)
+            except (TypeError, ValueError):
+                raise serializers.ValidationError({"duration_days": "Duration must be a positive integer."})
+            if duration_days <= 0:
+                raise serializers.ValidationError({"duration_days": "Duration must be at least one day."})
+            attrs["timing_mode"] = Trip.MULTI_DAY
+            attrs["duration_days"] = duration_days
+            attrs["duration_hours"] = None
+            attrs["end"] = start + timedelta(days=duration_days)
+
+        return super().validate(attrs)
+
+    def update(self, instance, validated_data):
+        price_cents = validated_data.pop("price_cents", None)
+        instance = super().update(instance, validated_data)
+
+        if price_cents is not None:
+            instance.update_single_tier_pricing(price_cents)
+            instance.save(update_fields=["pricing_snapshot"])
+
+        return instance
+
+
 class TripTemplateSerializer(serializers.ModelSerializer):
     pricing_tiers = serializers.ListField(child=serializers.DictField(), allow_empty=False)
     deposit_percent = serializers.DecimalField(max_digits=5, decimal_places=2, default=0)
@@ -174,7 +278,9 @@ class TripTemplateSerializer(serializers.ModelSerializer):
             "service",
             "title",
             "duration_hours",
+            "duration_days",
             "location",
+            "timing_mode",
             "pricing_currency",
             "is_deposit_required",
             "deposit_percent",
@@ -197,6 +303,37 @@ class TripTemplateSerializer(serializers.ModelSerializer):
             ratio = getattr(self.instance, "target_clients_per_guide", None)
         if ratio is not None and ratio <= 0:
             raise serializers.ValidationError({"target_clients_per_guide": "Enter a value greater than zero."})
+
+        timing_mode = attrs.get("timing_mode") or getattr(self.instance, "timing_mode", Trip.MULTI_DAY)
+        attrs["timing_mode"] = timing_mode
+        if timing_mode == Trip.SINGLE_DAY:
+            duration_hours = attrs.get("duration_hours")
+            if duration_hours is None:
+                duration_hours = getattr(self.instance, "duration_hours", None)
+            if duration_hours in (None, "", 0):
+                raise serializers.ValidationError({"duration_hours": "Duration in hours is required for single-day templates."})
+            try:
+                duration_hours = int(duration_hours)
+            except (TypeError, ValueError):
+                raise serializers.ValidationError({"duration_hours": "Duration must be a positive integer."})
+            if duration_hours <= 0:
+                raise serializers.ValidationError({"duration_hours": "Duration must be greater than zero."})
+            attrs["duration_hours"] = duration_hours
+            attrs["duration_days"] = None
+        else:
+            duration_days = attrs.get("duration_days")
+            if duration_days is None:
+                duration_days = getattr(self.instance, "duration_days", None)
+            if duration_days in (None, "", 0):
+                raise serializers.ValidationError({"duration_days": "Duration in days is required for multi-day templates."})
+            try:
+                duration_days = int(duration_days)
+            except (TypeError, ValueError):
+                raise serializers.ValidationError({"duration_days": "Duration must be a positive integer."})
+            if duration_days <= 0:
+                raise serializers.ValidationError({"duration_days": "Duration must be at least one day."})
+            attrs["duration_days"] = duration_days
+            attrs["duration_hours"] = None
 
         sorted_tiers = sorted(tiers, key=lambda t: t.get("min_guests") or 0)
         last_max = 0

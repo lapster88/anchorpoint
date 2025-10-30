@@ -33,6 +33,8 @@ def trip(db, guide_service):
         location="Alps",
         start=now + timezone.timedelta(days=5),
         end=now + timezone.timedelta(days=6),
+        timing_mode=Trip.MULTI_DAY,
+        duration_days=1,
         pricing_snapshot=build_single_tier_snapshot(50000),
     )
 

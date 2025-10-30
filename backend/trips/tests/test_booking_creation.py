@@ -1,4 +1,5 @@
 import types
+from datetime import datetime
 
 import pytest
 from django.utils import timezone
@@ -37,6 +38,8 @@ def trip(db, service):
         location="Rainier",
         start=timezone.now() + timezone.timedelta(days=10),
         end=timezone.now() + timezone.timedelta(days=12),
+        timing_mode=Trip.MULTI_DAY,
+        duration_days=2,
         pricing_snapshot=build_single_tier_snapshot(20000),
     )
 
@@ -156,15 +159,16 @@ def test_create_trip_with_party(monkeypatch, owner, service):
     monkeypatch.setattr("trips.api.create_checkout_session", lambda **kwargs: fake_session)
     monkeypatch.setattr("trips.api.send_booking_confirmation_email", lambda **kwargs: None)
 
-    start = timezone.now() + timezone.timedelta(days=30)
-    end = start + timezone.timedelta(days=1)
+    start_base = timezone.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    start = start_base + timezone.timedelta(days=30)
 
     payload = {
         "guide_service": service.id,
         "title": "Private Glacier Day",
         "location": "Mt. Baker",
         "start": start.isoformat().replace("+00:00", "Z"),
-        "end": end.isoformat().replace("+00:00", "Z"),
+        "timing_mode": Trip.SINGLE_DAY,
+        "duration_hours": 10,
         "price_cents": 25000,
         "description": "Technical glacier travel",
         "party": {
@@ -190,15 +194,15 @@ def test_create_trip_without_party_rejected(owner, service):
     client = APIClient()
     client.force_authenticate(owner)
 
-    start = timezone.now() + timezone.timedelta(days=10)
-    end = start + timezone.timedelta(days=1)
+    start = timezone.now() + timezone.timedelta(days=10, hours=7)
 
     payload = {
         "guide_service": service.id,
         "title": "Ski Day",
         "location": "Alpental",
         "start": start.isoformat().replace("+00:00", "Z"),
-        "end": end.isoformat().replace("+00:00", "Z"),
+        "timing_mode": Trip.SINGLE_DAY,
+        "duration_hours": 8,
         "price_cents": 18000,
     }
 
@@ -221,15 +225,16 @@ def test_create_trip_with_party_and_guide(monkeypatch, owner, service, guide_use
     monkeypatch.setattr("trips.api.create_checkout_session", lambda **kwargs: fake_session)
     monkeypatch.setattr("trips.api.send_booking_confirmation_email", lambda **kwargs: None)
 
-    start = timezone.now() + timezone.timedelta(days=5)
-    end = start + timezone.timedelta(days=1)
+    start_base = timezone.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    start = start_base + timezone.timedelta(days=5)
 
     payload = {
         "guide_service": service.id,
         "title": "Private Trip",
         "location": "Mt. Hood",
         "start": start.isoformat().replace("+00:00", "Z"),
-        "end": end.isoformat().replace("+00:00", "Z"),
+        "timing_mode": Trip.SINGLE_DAY,
+        "duration_hours": 9,
         "price_cents": 15000,
         "description": "",
         "guides": [guide_user.id],
@@ -281,15 +286,16 @@ def test_create_trip_with_multiple_guides(monkeypatch, owner, service, guide_use
     monkeypatch.setattr("trips.api.create_checkout_session", lambda **kwargs: fake_session)
     monkeypatch.setattr("trips.api.send_booking_confirmation_email", lambda **kwargs: None)
 
-    start = timezone.now() + timezone.timedelta(days=5)
-    end = start + timezone.timedelta(days=1)
+    start_base = timezone.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    start = start_base + timezone.timedelta(days=5)
 
     payload = {
         "guide_service": service.id,
         "title": "Team Trip",
         "location": "Mt. Hood",
         "start": start.isoformat().replace("+00:00", "Z"),
-        "end": end.isoformat().replace("+00:00", "Z"),
+        "timing_mode": Trip.SINGLE_DAY,
+        "duration_hours": 9,
         "price_cents": 22000,
         "description": "",
         "guides": [guide_user.id, additional_guide.id],
@@ -307,6 +313,158 @@ def test_create_trip_with_multiple_guides(monkeypatch, owner, service, guide_use
     data = response.json()
     assignments = Assignment.objects.filter(trip_id=data["id"]).order_by("guide_id")
     assert list(assignments.values_list("guide_id", flat=True)) == sorted([guide_user.id, additional_guide.id])
+
+
+@pytest.mark.django_db
+def test_create_multi_day_trip_derives_end(monkeypatch, owner, service):
+    client = APIClient()
+    client.force_authenticate(owner)
+
+    fake_session = types.SimpleNamespace(
+        payment_intent="pi_test",
+        id="cs_test",
+        payment_status="unpaid",
+        url="https://stripe.test/checkout",
+    )
+
+    monkeypatch.setattr("trips.api.create_checkout_session", lambda **kwargs: fake_session)
+    monkeypatch.setattr("trips.api.send_booking_confirmation_email", lambda **kwargs: None)
+
+    start = timezone.now() + timezone.timedelta(days=15, hours=7)
+    payload = {
+        "guide_service": service.id,
+        "title": "Alpine Expedition",
+        "location": "North Cascades",
+        "start": start.isoformat().replace("+00:00", "Z"),
+        "timing_mode": Trip.MULTI_DAY,
+        "duration_days": 4,
+        "price_cents": 32000,
+        "party": {
+            "primary_guest": {
+                "email": "guest@example.com",
+                "first_name": "Greta",
+                "last_name": "Guest",
+            }
+        },
+    }
+
+    response = client.post("/api/trips/", payload, format="json")
+    assert response.status_code == 201
+    data = response.json()
+    assert data["timing_mode"] == Trip.MULTI_DAY
+    assert data["duration_days"] == 4
+    assert data["duration_hours"] is None
+
+    expected_end = start + timezone.timedelta(days=4)
+    parsed_end = datetime.fromisoformat(data["end"].replace("Z", "+00:00"))
+    assert parsed_end == expected_end
+
+    trip = Trip.objects.get(id=data["id"])
+    assert trip.duration_days == 4
+    assert trip.duration_hours is None
+    assert trip.end == expected_end
+
+
+@pytest.mark.django_db
+def test_owner_updates_single_day_trip_start_recalculates_end(owner, service):
+    client = APIClient()
+    client.force_authenticate(owner)
+
+    start = (timezone.now() + timezone.timedelta(days=7)).replace(hour=8, minute=0, second=0, microsecond=0)
+    trip = Trip.objects.create(
+        guide_service=service,
+        title="Rock Skills",
+        location="Index",
+        start=start,
+        end=start + timezone.timedelta(hours=8),
+        timing_mode=Trip.SINGLE_DAY,
+        duration_hours=8,
+        pricing_snapshot=build_single_tier_snapshot(15000),
+    )
+
+    new_start = start + timezone.timedelta(hours=1)
+    response = client.patch(
+        f"/api/trips/{trip.id}/",
+        {"start": new_start.isoformat().replace("+00:00", "Z")},
+        format="json",
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["timing_mode"] == Trip.SINGLE_DAY
+    assert data["duration_hours"] == 8
+
+    expected_end = new_start + timezone.timedelta(hours=8)
+    parsed_end = datetime.fromisoformat(data["end"].replace("Z", "+00:00"))
+    assert parsed_end == expected_end
+
+    trip.refresh_from_db()
+    assert trip.start == new_start
+    assert trip.end == new_start + timezone.timedelta(hours=8)
+
+
+@pytest.mark.django_db
+def test_owner_updates_trip_price_snapshot(owner, service):
+    client = APIClient()
+    client.force_authenticate(owner)
+
+    start = timezone.now() + timezone.timedelta(days=10)
+    trip = Trip.objects.create(
+        guide_service=service,
+        title="Custom Course",
+        location="Rainier",
+        start=start,
+        end=start + timezone.timedelta(days=2),
+        timing_mode=Trip.MULTI_DAY,
+        duration_days=2,
+        pricing_snapshot=build_single_tier_snapshot(18000),
+    )
+
+    response = client.patch(
+        f"/api/trips/{trip.id}/",
+        {"price_cents": 22000},
+        format="json",
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["pricing_snapshot"]["tiers"][0]["price_per_guest_cents"] == 22000
+
+    trip.refresh_from_db()
+    assert trip.price_cents == 22000
+    assert trip.pricing_snapshot["tiers"][0]["price_per_guest_cents"] == 22000
+
+
+@pytest.mark.django_db
+def test_owner_updates_multi_day_trip_duration(owner, service):
+    client = APIClient()
+    client.force_authenticate(owner)
+
+    start = (timezone.now() + timezone.timedelta(days=12)).replace(hour=7, minute=0, second=0, microsecond=0)
+    trip = Trip.objects.create(
+        guide_service=service,
+        title="Alpine Traverse",
+        location="North Cascades",
+        start=start,
+        end=start + timezone.timedelta(days=2),
+        timing_mode=Trip.MULTI_DAY,
+        duration_days=2,
+        pricing_snapshot=build_single_tier_snapshot(20000),
+    )
+
+    response = client.patch(
+        f"/api/trips/{trip.id}/",
+        {"duration_days": 3},
+        format="json",
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["duration_days"] == 3
+    expected_end = start + timezone.timedelta(days=3)
+    parsed_end = datetime.fromisoformat(data["end"].replace("Z", "+00:00"))
+    assert parsed_end == expected_end
+
+    trip.refresh_from_db()
+    assert trip.duration_days == 3
+    assert trip.end == expected_end
 
 
 @pytest.mark.django_db
@@ -434,6 +592,8 @@ def test_party_size_update_uses_tier_pricing(monkeypatch, owner, service):
         location="Desert",
         start=timezone.now() + timezone.timedelta(days=7),
         end=timezone.now() + timezone.timedelta(days=8),
+        timing_mode=Trip.MULTI_DAY,
+        duration_days=1,
         pricing_snapshot=pricing_snapshot,
         template_snapshot={"pricing": pricing_snapshot},
         template_used=None,

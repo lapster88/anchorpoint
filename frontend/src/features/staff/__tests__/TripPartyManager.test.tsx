@@ -35,6 +35,47 @@ vi.mock('../CreatePartyForm', () => ({
   ),
 }))
 
+const mockEditedTrip = {
+  id: 1,
+  guide_service: 1,
+  guide_service_name: 'Summit Guides',
+  title: 'Glacier Intro (Updated)',
+  location: 'Mt. Baker',
+  start: '2025-10-21T08:00:00Z',
+  end: '2025-10-21T16:00:00Z',
+  price_cents: 16000,
+  difficulty: null,
+  description: '',
+  duration_hours: 8,
+  duration_days: null,
+  timing_mode: 'single_day' as const,
+  target_clients_per_guide: 3,
+  notes: '',
+  parties: [],
+  assignments: [],
+  requires_assignment: false,
+  pricing_snapshot: {
+    currency: 'usd',
+    is_deposit_required: false,
+    deposit_percent: '0',
+    tiers: [
+      { min_guests: 1, max_guests: null, price_per_guest: '160.00', price_per_guest_cents: 16000 }
+    ],
+  },
+  template_id: null,
+  template_snapshot: null,
+}
+
+vi.mock('../../trips/EditTripForm', () => ({
+  __esModule: true,
+  default: ({ onSaved, onClose }: { onSaved: (trip: typeof mockEditedTrip) => void; onClose: () => void }) => (
+    <div>
+      <button onClick={() => onSaved(mockEditedTrip)}>mock edit form</button>
+      <button onClick={onClose}>cancel edit</button>
+    </div>
+  ),
+}))
+
 const trip = {
   id: 1,
   title: 'Glacier Intro',
@@ -46,6 +87,10 @@ const trip = {
   guide_service_name: 'Summit Guides',
   assignments: [],
   requires_assignment: true,
+  timing_mode: 'single_day' as const,
+  duration_hours: 8,
+  duration_days: null,
+  target_clients_per_guide: 3,
   pricing_snapshot: {
     currency: 'usd',
     is_deposit_required: false,
@@ -85,10 +130,17 @@ describe('TripPartyManager', () => {
       price_cents: trip.price_cents,
       difficulty: null,
       description: '',
+      duration_hours: 8,
+      duration_days: null,
+      timing_mode: 'single_day' as const,
+      target_clients_per_guide: 3,
+      notes: '',
       parties: [],
       assignments: [],
       requires_assignment: true,
       pricing_snapshot: trip.pricing_snapshot,
+      template_id: null,
+      template_snapshot: null,
     }
 
     listTripParties.mockResolvedValue([])
@@ -224,6 +276,25 @@ describe('TripPartyManager', () => {
       expect(assignGuides).toHaveBeenCalledWith(trip.id, [])
     })
     expect((await screen.findByLabelText('Gabe Guide')) as HTMLInputElement).not.toBeChecked()
+  })
+
+  it('allows editing trip details', async () => {
+    const onTripUpdate = vi.fn()
+    renderManager({ onTripUpdate })
+
+    await screen.findByText(/Manage Glacier Intro/)
+    const editButton = await screen.findByRole('button', { name: /Edit trip details/i })
+    await userEvent.click(editButton)
+
+    const editFormButton = await screen.findByText('mock edit form')
+    await userEvent.click(editFormButton)
+
+    await waitFor(() => {
+      expect(onTripUpdate).toHaveBeenCalledWith(expect.objectContaining({ id: mockEditedTrip.id, price_cents: mockEditedTrip.price_cents }))
+    })
+    await waitFor(() => {
+      expect(screen.queryByText('mock edit form')).not.toBeInTheDocument()
+    })
   })
 
   it('shows read-only assignment when editing disabled', async () => {

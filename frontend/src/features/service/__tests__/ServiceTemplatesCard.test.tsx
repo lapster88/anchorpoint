@@ -46,6 +46,7 @@ const baseTemplate = {
   service: membership.guide_service,
   title: 'Glacier Skills',
   duration_hours: 8,
+  duration_days: null,
   location: 'Mount Baker',
   pricing_currency: 'usd',
   is_deposit_required: false,
@@ -54,6 +55,7 @@ const baseTemplate = {
     { min_guests: 1, max_guests: 2, price_per_guest: '150.00' },
     { min_guests: 3, max_guests: null, price_per_guest: '130.00' }
   ],
+  timing_mode: 'single_day',
   target_clients_per_guide: 3,
   notes: 'Bring crampons',
   is_active: true,
@@ -122,6 +124,7 @@ describe('ServiceTemplatesCard', () => {
       service: 42,
       title: 'Private Ice',
       duration_hours: 9,
+      duration_days: null,
       location: 'Coleman Icefall',
       pricing_currency: 'usd',
       is_deposit_required: false,
@@ -129,6 +132,7 @@ describe('ServiceTemplatesCard', () => {
       pricing_tiers: [
         { min_guests: 1, max_guests: null, price_per_guest: '175' }
       ],
+      timing_mode: 'single_day',
       target_clients_per_guide: 4,
       notes: 'Ice screws required',
       is_active: true
@@ -161,6 +165,7 @@ describe('ServiceTemplatesCard', () => {
       service: 42,
       title: 'Glacier Skills',
       duration_hours: 8,
+      duration_days: null,
       location: 'Mount Baker',
       pricing_currency: 'usd',
       is_deposit_required: false,
@@ -169,6 +174,7 @@ describe('ServiceTemplatesCard', () => {
         { min_guests: 1, max_guests: 2, price_per_guest: '155' },
         { min_guests: 3, max_guests: null, price_per_guest: '130.00' }
       ],
+      timing_mode: 'single_day',
       target_clients_per_guide: 3,
       notes: 'Updated notes',
       is_active: false

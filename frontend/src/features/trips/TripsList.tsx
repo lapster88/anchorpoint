@@ -21,6 +21,9 @@ export type Trip = {
   requires_assignment: boolean
   pricing_snapshot?: TripPricingSnapshot | null
   target_clients_per_guide?: number | null
+  duration_hours: number | null
+  duration_days: number | null
+  timing_mode: 'single_day' | 'multi_day'
 }
 
 export default function TripsList(){
@@ -89,8 +92,34 @@ export default function TripsList(){
         requires_assignment: detail.requires_assignment,
         target_clients_per_guide: detail.target_clients_per_guide,
         pricing_snapshot: detail.pricing_snapshot,
+        duration_hours: detail.duration_hours,
+        duration_days: detail.duration_days,
+        timing_mode: detail.timing_mode,
       }
     })
+  }, [])
+
+  const formatTripTiming = useCallback((trip: Trip) => {
+    const startDate = new Date(trip.start)
+    if (Number.isNaN(startDate.getTime())) {
+      return 'Unscheduled'
+    }
+    if (trip.timing_mode === 'single_day') {
+      const startTime = startDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+      const duration =
+        trip.duration_hours ??
+        Math.max(
+          1,
+          Math.round((new Date(trip.end).getTime() - startDate.getTime()) / 3600000)
+        )
+      return `${startDate.toLocaleDateString()} · ${startTime} · ${duration}h`
+    }
+    const endDate = new Date(trip.end)
+    const dayCount =
+      trip.duration_days ??
+      Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / 86400000))
+    const durationLabel = dayCount ? `${dayCount} day${dayCount === 1 ? '' : 's'}` : ''
+    return `${startDate.toLocaleDateString()} → ${endDate.toLocaleDateString()}${durationLabel ? ` · ${durationLabel}` : ''}`
   }, [])
 
   if (!isAuthenticated) return null
@@ -132,6 +161,9 @@ export default function TripsList(){
               requires_assignment: tripDetail.requires_assignment,
               target_clients_per_guide: tripDetail.target_clients_per_guide,
               pricing_snapshot: tripDetail.pricing_snapshot,
+              duration_hours: tripDetail.duration_hours,
+              duration_days: tripDetail.duration_days,
+              timing_mode: tripDetail.timing_mode,
             })
           }}
         />
@@ -140,7 +172,8 @@ export default function TripsList(){
         {tripsWithDefaults?.map((t: Trip) => (
           <div key={t.id} className="card space-y-2">
             <h3 className="text-xl font-semibold">{t.title}</h3>
-            <p>{t.location} · {new Date(t.start).toLocaleDateString()}</p>
+            <p className="text-sm text-gray-700">{t.location}</p>
+            <p className="text-xs text-gray-500">{formatTripTiming(t)}</p>
             {showServiceLabel && (
               <p className="text-xs text-gray-500">{t.guide_service_name}</p>
             )}
@@ -184,6 +217,9 @@ export default function TripsList(){
             requires_assignment: selectedTrip.requires_assignment,
             target_clients_per_guide: selectedTrip.target_clients_per_guide,
             pricing_snapshot: selectedTrip.pricing_snapshot,
+            timing_mode: selectedTrip.timing_mode,
+            duration_hours: selectedTrip.duration_hours,
+            duration_days: selectedTrip.duration_days,
           }}
           onClose={() => setSelectedTrip(null)}
           canEditAssignments={canManageBookings}
