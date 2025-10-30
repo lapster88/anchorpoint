@@ -33,6 +33,9 @@ fe:
 devseed:
 	$(COMPOSE) exec backend python manage.py devseed
 
+migrate:
+	$(COMPOSE) exec backend python manage.py migrate
+
 test:
 	$(COMPOSE) exec backend pytest
 	$(COMPOSE) exec frontend pnpm test

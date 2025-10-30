@@ -5,7 +5,7 @@
 - Keep the Docker-first workflow in mind—commands in `docs/CODEX_NOTES.md` describe the expected way to run servers, tests, and seeds.
 
 ## Development workflow
-- Use the provided make/compose commands for local work (`make up`, `make be`, `make fe`, `make down`, `make logs`). Avoid running host binaries directly unless explicitly required.
+- Use the provided make/compose commands for local work (`make up`, `make be`, `make fe`, `make devseed`, `make test`, etc.). Avoid running raw `docker compose …` or host binaries unless explicitly required so our command history stays consistent.
 - Keep the `.env` file aligned with `.env.example` and Docker requirements when booting the stack.
 - Running `docker compose --env-file .env -f infra/docker-compose.yml exec backend python manage.py devseed` resets seed users and passwords when you need fixture data.
 - Logo uploads default to local media under `MEDIA_ROOT`; set `USE_S3_MEDIA=true` and the AWS `AWS_STORAGE_BUCKET_NAME`, `AWS_S3_REGION_NAME`, etc. env vars if you want to back them with S3 via `django-storages`.
