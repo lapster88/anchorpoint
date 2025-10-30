@@ -178,7 +178,7 @@ export default function EditTripForm({ trip, onClose, onSaved }: Props){
   const saving = mutation.isPending
 
   return (
-    <section className="space-y-6 rounded-lg border bg-white p-6 shadow-md">
+    <section className="space-y-6 rounded-lg border bg-white p-6 shadow-md max-h-[85vh] overflow-y-auto">
       <header className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Edit trip</h2>
         <button
