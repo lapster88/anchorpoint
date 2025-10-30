@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { vi } from 'vitest'
 
 import ServiceSettingsPage from '../ServiceSettingsPage'
+import { MembershipsProvider } from '../../../lib/memberships'
 
 const { fetchMemberships } = vi.hoisted(() => ({
   fetchMemberships: vi.fn(),
@@ -36,17 +37,24 @@ vi.mock('../../../lib/auth', () => ({
   useAuth: () => ({ isAuthenticated: true }),
 }))
 
+let queryClient: QueryClient
+
 function renderPage(){
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
-      <ServiceSettingsPage />
+      <MembershipsProvider>
+        <ServiceSettingsPage />
+      </MembershipsProvider>
     </QueryClientProvider>
   )
 }
 
 describe('ServiceSettingsPage', () => {
   afterEach(() => {
+    if (queryClient) {
+      queryClient.clear()
+    }
     vi.clearAllMocks()
   })
 

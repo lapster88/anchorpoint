@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
-import { fetchMemberships, ServiceMembership } from '../profile/api'
+import { useMemberships } from '../../lib/memberships'
 import TripPartyManager from '../staff/TripPartyManager'
 import CreateTripForm from './CreateTripForm'
 import TripGuideDetails from './TripGuideDetails'
@@ -37,32 +37,15 @@ export default function TripsList(){
     // Avoid calling the API before the user completes authentication.
     enabled: isAuthenticated
   })
-  const { data: memberships } = useQuery({
-    queryKey: ['memberships'],
-    queryFn: fetchMemberships,
-    enabled: isAuthenticated
-  })
-  const activeMemberships = useMemo(
-    () => (memberships ?? []).filter((membership) => membership.is_active),
-    [memberships]
-  )
-  const managedMembership = useMemo(
-    () => activeMemberships.find((m) => ['OWNER', 'OFFICE_MANAGER', 'GUEST'].includes(m.role)),
-    [activeMemberships]
-  )
-  const uniqueServiceIds = useMemo(() => new Set(activeMemberships.map((m) => m.guide_service)), [activeMemberships])
-  const activeServiceId = managedMembership?.guide_service ?? (activeMemberships.length === 1 ? activeMemberships[0].guide_service : null)
-  const activeServiceName = managedMembership?.guide_service_name ?? (activeServiceId ? activeMemberships.find((m) => m.guide_service === activeServiceId)?.guide_service_name : undefined)
-  const showServiceLabel = useMemo(() => {
-    const hasGuideRole = activeMemberships.some((m) => m.role === 'GUIDE')
-    return hasGuideRole && uniqueServiceIds.size > 1
-  }, [activeMemberships, uniqueServiceIds])
+  const {
+    canManageService,
+    activeServiceId,
+    activeServiceName,
+    showServiceLabel,
+    isGuide,
+  } = useMemberships()
 
-  const canManageBookings = useMemo(() => {
-    return memberships?.some((m: ServiceMembership) => ['OWNER', 'OFFICE_MANAGER'].includes(m.role)) ?? false
-  }, [memberships])
-
-  const isGuide = useMemo(() => activeMemberships.some((m) => m.role === 'GUIDE'), [activeMemberships])
+  const canManageBookings = canManageService
 
   const results: Trip[] = (data?.results || data || []) as Trip[]
   const tripsWithDefaults = useMemo(

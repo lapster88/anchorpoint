@@ -1,34 +1,12 @@
-import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
-
 import { useAuth } from '../../lib/auth'
-import {
-  fetchMemberships,
-  ServiceMembership
-} from '../profile/api'
+import { useMemberships } from '../../lib/memberships'
 import ServiceBrandingCard from '../profile/ServiceBrandingCard'
 import ServiceStripeCard from './ServiceStripeCard'
 import ServiceTemplatesCard from './ServiceTemplatesCard'
 
-const MANAGER_ROLES = new Set(['OWNER', 'OFFICE_MANAGER'])
-
 export default function ServiceSettingsPage(){
   const { isAuthenticated } = useAuth()
-
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['memberships'],
-    queryFn: fetchMemberships,
-    enabled: isAuthenticated
-  })
-
-  const manageableMemberships = useMemo(
-    () =>
-      (data ?? []).filter(
-        (membership: ServiceMembership) =>
-          membership.is_active && MANAGER_ROLES.has(membership.role)
-      ),
-    [data]
-  )
+  const { manageableMemberships, isLoading, error } = useMemberships()
 
   if (!isAuthenticated) return null
 
