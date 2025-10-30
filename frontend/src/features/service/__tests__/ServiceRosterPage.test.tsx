@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { vi } from 'vitest'
 
 import ServiceRosterPage from '../ServiceRosterPage'
+import { MembershipsProvider } from '../../../lib/memberships'
 
 const fetchMemberships = vi.fn()
 const fetchServiceRoster = vi.fn()
@@ -31,6 +32,8 @@ vi.mock('../api', () => ({
 }))
 
 const queryClientFactory = () => new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+let queryClient: QueryClient
 
 describe('ServiceRosterPage', () => {
   beforeEach(() => {
@@ -111,14 +114,19 @@ describe('ServiceRosterPage', () => {
   })
 
   afterEach(() => {
+    if (queryClient) {
+      queryClient.clear()
+    }
     vi.clearAllMocks()
   })
 
   function renderPage(){
-    const queryClient = queryClientFactory()
+    queryClient = queryClientFactory()
     return render(
       <QueryClientProvider client={queryClient}>
-        <ServiceRosterPage />
+        <MembershipsProvider>
+          <ServiceRosterPage />
+        </MembershipsProvider>
       </QueryClientProvider>
     )
   }

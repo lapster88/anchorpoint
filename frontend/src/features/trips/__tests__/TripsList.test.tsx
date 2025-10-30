@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { vi } from 'vitest'
 import TripsList from '../TripsList'
+import { MembershipsProvider } from '../../../lib/memberships'
 
 vi.mock('../../profile/api', () => ({
   fetchMemberships: vi.fn(),
@@ -82,7 +83,9 @@ function renderTripsList(){
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
   return render(
     <QueryClientProvider client={queryClient}>
-      <TripsList />
+      <MembershipsProvider>
+        <TripsList />
+      </MembershipsProvider>
     </QueryClientProvider>
   )
 }

@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { fetchMemberships, ServiceMembership } from '../profile/api'
+import { ServiceMembership } from '../profile/api'
 import {
   cancelServiceInvitation,
   fetchServiceRoster,
@@ -13,8 +13,7 @@ import {
   deleteServiceMember
 } from './api'
 import { useAuth } from '../../lib/auth'
-
-const MANAGER_ROLES = new Set(['OWNER', 'OFFICE_MANAGER'])
+import { useMemberships } from '../../lib/memberships'
 const ROLE_OPTIONS = [
   { value: 'OWNER', label: 'Owner' },
   { value: 'OFFICE_MANAGER', label: 'Office Manager' },
@@ -29,19 +28,7 @@ type RosterCardProps = {
 
 export default function ServiceRosterPage(){
   const { isAuthenticated } = useAuth()
-  const { data: memberships, isLoading } = useQuery({
-    queryKey: ['memberships'],
-    queryFn: fetchMemberships,
-    enabled: isAuthenticated
-  })
-
-  const manageableMemberships = useMemo(
-    () =>
-      (memberships ?? []).filter(
-        (membership) => membership.is_active && MANAGER_ROLES.has(membership.role)
-      ),
-    [memberships]
-  )
+  const { manageableMemberships, isLoading } = useMemberships()
 
   if (!isAuthenticated) return null
 
